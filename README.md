@@ -30,6 +30,11 @@ Pinned tabs form logical groups, and every group is present in every normal wind
 - **Autosaves keep the last 10 states of the set.** An entry is written when the set changes structurally: a pinned tab is added, removed, or navigates to a different page; query-string/hash-only changes do not count. They are the safety net (closed a window with all your pins - bring them back) and the undo: before a set is restored, the current state goes into the autosaves.
 - Named sets live in `storage.sync` - with Chrome sync enabled they travel to other machines; autosaves are local.
 
+## Split View
+- Tabs in Chrome's split view are ordinary tabs to the protection: closing a protected split member brings it right back.
+- The empty pinned tab Chrome creates as a split-view partner (the blank new-tab page) is treated as ephemeral: it is not protected, not mirrored and not saved into sets - so dismissing a split never leaves phantom empty pins behind. As soon as that partner navigates to a real page, it becomes a first-class pin: protected, mirrored, snapshotted.
+- Chrome exposes split view to extensions read-only (`tab.splitViewId` as of Chrome 148; there is no API to create or modify splits). The honest consequences: a reopened tab returns pinned but outside its former split, mirror copies in other windows are not split, and restoring a set cannot re-create splits. Sets already STORE the split pairs (`splits`), so restore will pick them up the moment Chrome ships a write API.
+
 ## Closing a protected tab
 - Pinned: unpin it, then close.
 - Manually locked: turn off "Lock this tab" in the popup, then close.
@@ -52,6 +57,6 @@ Auto-protect pinned tabs (on) - 🔒 in the title (on) - mirror across windows (
 
 ## Development
 - `extension/` - MV3: `background.js` (reopen-protection, mirror groups, sets and autosaves), `content.js` (the 🔒 title prefix only), `popup.*` (UI), `options.*`, `i18n.js` + `_locales/` (8 languages), `icons/`.
-- Tests: `cd test && npm install && npm test` - e2e on puppeteer against a real Chrome for Testing: 23 scenarios (immortality under every close method, repeated closes, the reopen notification, free reload/navigation, the unpin-then-close path, manual lock carried over to the reopened tab, regular tabs untouched, settings, the global toggle from the popup, snapshot diff-restore, autosave triggers, popup rendering incl. long set names, mirroring across three windows, adoption without duplicates, extension reload without duplicates (simulated; the repro test is proven to fail on the old code), mirror off, localization, a clean service worker log). `HEADFUL=1 npm test` to watch.
+- Tests: `cd test && npm install && npm test` - e2e on puppeteer against a real Chrome for Testing: 24 scenarios (immortality under every close method, repeated closes, the reopen notification, free reload/navigation, the unpin-then-close path, manual lock carried over to the reopened tab, regular tabs untouched, settings, the global toggle from the popup, snapshot diff-restore, autosave triggers, popup rendering incl. long set names, mirroring across three windows, adoption without duplicates, the ephemeral split-view partner rule, extension reload without duplicates (simulated; the repro test is proven to fail on the old code), mirror off, localization, a clean service worker log). `HEADFUL=1 npm test` to watch.
 - `test/shot.mjs <out.png>` - a popup screenshot with real data (for UI work).
 - Live diagnostics: `chrome://extensions` - service worker - console, the `__tpDiag` object (job queue and a trace of recent events).

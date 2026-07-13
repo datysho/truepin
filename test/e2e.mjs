@@ -478,6 +478,10 @@ async function main() {
     step("save snapshot 'work'");
     const saved = await uiCall({ type: "ui:saveSnapshot", windowId: snapWindowId, name: "work" });
     assert(saved.ok, "saved");
+    const snapRaw = await swEval(
+      async () => (await chrome.storage.sync.get("snap:work"))["snap:work"],
+    );
+    assert(Array.isArray(snapRaw.splits), "snapshot stores split-view pairs (forward-compat)");
 
     step("mutate: drop s2, add s3");
     await setPinned(b.tab.id, false);
@@ -797,6 +801,73 @@ async function main() {
       counts.every((n) => n === counts[0]),
       "closing a whole window resurrected nothing",
     );
+  });
+
+  await test("empty pinned tab (split-view partner): not mirrored, not protected, becomes real on navigation", async () => {
+    const beforeCounts = {};
+    for (const wid of [mirrorWinId, urlWinId]) beforeCounts[wid] = (await pinnedOf(wid)).length;
+
+    step("create a pinned empty tab (what Chrome makes as a split partner)");
+    const ntp = await swEval(async (wid) => {
+      const tab = await chrome.tabs.create({
+        windowId: wid,
+        url: "chrome://newtab/",
+        pinned: true,
+        active: false,
+      });
+      return tab.id;
+    }, snapWindowId);
+    await sleep(2000);
+    step("no copies were mirrored");
+    for (const wid of [mirrorWinId, urlWinId]) {
+      assert(
+        (await pinnedOf(wid)).length === beforeCounts[wid],
+        `window ${wid} unchanged by the empty pin`,
+      );
+    }
+    step("closing the empty pin does not resurrect it");
+    await removeTab(ntp);
+    await sleep(1800);
+    const stillThere = await swEval(
+      async (wid) =>
+        (await chrome.tabs.query({ windowId: wid, pinned: true })).some((t) =>
+          /newtab/i.test(t.url || t.pendingUrl || ""),
+        ),
+      snapWindowId,
+    );
+    assert(!stillThere, "empty pinned tab stayed closed");
+
+    step("a partner that navigates to a real page becomes a first-class pin");
+    const ntp2 = await swEval(async (wid) => {
+      const tab = await chrome.tabs.create({
+        windowId: wid,
+        url: "chrome://newtab/",
+        pinned: true,
+        active: false,
+      });
+      return tab.id;
+    }, snapWindowId);
+    await sleep(800);
+    await swEval((id, url) => chrome.tabs.update(id, { url }), ntp2, `${baseUrl}/sp1`);
+    await waitFor(
+      "copies appear after navigation",
+      async () => {
+        for (const wid of [mirrorWinId, urlWinId]) {
+          const pins = await pinnedOf(wid);
+          if (!pins.some((p) => p.url.includes("/sp1"))) return false;
+        }
+        return true;
+      },
+      10_000,
+      250,
+    );
+    await waitFor("now protected", async () => (await tabState(ntp2))?.protected === true);
+    step("cleanup: unpin (dissolves copies), then close");
+    await setPinned(ntp2, false);
+    await sleep(1200);
+    await removeTab(ntp2);
+    await sleep(600);
+    assert(!(await findTab("/sp1")), "cleaned up");
   });
 
   await test("extension reload (simulated): bootstrap over wiped state does not duplicate", async () => {

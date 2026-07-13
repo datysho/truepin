@@ -116,6 +116,16 @@ function originKey(url) {
   }
 }
 
+// Ephemeral pages are not content: the empty new-tab page and blank tabs.
+// Chrome creates exactly such a pinned tab as a split-view partner - it must
+// not be protected, mirrored or snapshotted, or it turns into phantom empty
+// pins (resurrected on split teardown, copied into other windows). Once it
+// navigates to a real page it becomes a first-class pin.
+function isEphemeralUrl(url) {
+  if (!url) return true;
+  return /^(about:blank|chrome:\/\/newtab\/?|chrome:\/\/new-tab-page\/?)$/i.test(url);
+}
+
 async function getTabState(tabId) {
   const record = await chrome.storage.session.get(stateKey(tabId));
   return record[stateKey(tabId)] || null;
@@ -142,7 +152,7 @@ async function dropTabState(tabId) {
 // --- applying state to the browser --------------------------------------
 function computeProtected(state, settings) {
   if (state.manual === true || state.manual === false) return state.manual;
-  return settings.autoLockPinned && state.pinned;
+  return settings.autoLockPinned && state.pinned && !isEphemeralUrl(state.url);
 }
 
 // Fire-and-forget calls often target a tab that is mid-close. With the
@@ -287,6 +297,7 @@ async function registerPinnedTab(tab, settings) {
   }
 
   const url = tabUrl(tab);
+  if (isEphemeralUrl(url)) return; // split-view partners, blank pins
   const pendingIndex = mirror.pending.findIndex(
     (p) => p.windowId === tab.windowId && pathKey(p.url) === pathKey(url),
   );
@@ -561,7 +572,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         await putMirror(mirror);
         // Autosave only on a real page change, not query-string noise.
         if (oldKey !== pathKey(changeInfo.url)) scheduleAutoSnapshot();
-      } else {
+      } else if (!isEphemeralUrl(changeInfo.url)) {
+        // A pinned tab that was ephemeral (split-view partner on the empty
+        // new-tab page) just navigated somewhere real: it becomes a
+        // first-class pin - group it and mirror it now.
+        await registerPinnedTab(tab, settings);
         scheduleAutoSnapshot();
       }
     }
@@ -807,11 +822,24 @@ chrome.windows.onCreated.addListener((win) => {
 });
 
 // --- snapshots -----------------------------------------------------------------
-function snapshotFromTabs(tabs) {
+function snapshotFromTabs(allTabs) {
+  const tabs = allTabs.filter((t) => !isEphemeralUrl(tabUrl(t)));
+  // Split-view pairs, as index pairs into this set. Chrome's extensions API
+  // exposes splitViewId read-only (Chrome 148: no create/update), so this is
+  // stored forward-compatibly and applied once Chrome ships a write API.
+  const splits = [];
+  const seen = new Map();
+  tabs.forEach((tab, index) => {
+    const sid = tab.splitViewId !== undefined ? tab.splitViewId : chrome.tabs.SPLIT_VIEW_ID_NONE;
+    if (sid === chrome.tabs.SPLIT_VIEW_ID_NONE) return;
+    if (seen.has(sid)) splits.push([seen.get(sid), index]);
+    else seen.set(sid, index);
+  });
   return {
     urls: tabs.map((t) => tabUrl(t)),
     titles: tabs.map((t) => t.title || ""),
     keys: tabs.map((t) => pathKey(tabUrl(t))),
+    splits,
     savedAt: Date.now(),
   };
 }
@@ -855,7 +883,7 @@ async function writeAutoSnapshot() {
   if (!settings.autoSnapshot) return;
   const homeId = await pinnedHomeWindow();
   if (homeId === null) return; // no pinned tabs anywhere: keep history as is
-  const pinned = await pinnedTabsOf(homeId);
+  const pinned = (await pinnedTabsOf(homeId)).filter((t) => !isEphemeralUrl(tabUrl(t)));
   if (!pinned.length) return;
   const snap = snapshotFromTabs(pinned);
   const ring = await getAutoSnaps();
@@ -878,7 +906,7 @@ async function listSnapshots() {
 }
 
 async function saveSnapshot(name, windowId) {
-  const pinned = await pinnedTabsOf(windowId);
+  const pinned = (await pinnedTabsOf(windowId)).filter((t) => !isEphemeralUrl(tabUrl(t)));
   if (!pinned.length) return { error: "noPinned" };
   const clean = String(name || "").trim().slice(0, 40);
   if (!clean) return { error: "statusNameEmpty" };
