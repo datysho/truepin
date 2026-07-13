@@ -2,8 +2,6 @@
 const DEFAULTS = {
   autoLockPinned: true,
   showIcon: true,
-  restoreClosed: true,
-  restoreCooldownSec: 15,
   mirrorPinned: true,
   autoSnapshot: true,
   language: "auto",

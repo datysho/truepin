@@ -3,14 +3,13 @@
   "name": "TruePin",
   "description": "__MSG_appDesc__",
   "default_locale": "en",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "homepage_url": "https://github.com/datysho/truepin",
   "permissions": [
     "tabs",
     "scripting",
     "storage",
     "sessions",
-    "notifications",
     "favicon"
   ],
   "host_permissions": ["<all_urls>"],
@@ -21,9 +20,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "match_origin_as_fallback": true
+      "run_at": "document_start"
     }
   ],
   "action": {

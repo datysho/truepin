@@ -1,23 +1,19 @@
 // TruePin - service worker.
 //
-// Protection model, per tab:
+// Protection model, per tab (v3 - one rule, no dialogs):
 //   protected = manual override (popup switch), otherwise
 //               settings.autoLockPinned && tab.pinned
-//
-// Two layers of defense:
-//   1. The content script arms a beforeunload confirmation dialog
-//      ("Leave site?"). Chrome only shows it after the user has interacted
-//      with the page (sticky user activation).
-//   2. If a protected tab closes WITHOUT that dialog having been possible
-//      (page never interacted with, page discarded by memory saver,
-//      chrome:// pages where content scripts cannot run), the tab is
-//      reopened via chrome.sessions. Closing the same URL again within the
-//      cooldown is treated as deliberate and allowed through.
+//   A protected tab CANNOT be closed: any close is undone immediately and
+//   silently - the tab is reopened in place (chrome.sessions first, plain
+//   re-create as a fallback). The one sanctioned way to close it is to
+//   remove the protection first: unpin the tab (or flip the popup switch
+//   for manually locked ones), then close. No beforeunload dialogs, no
+//   notifications; reloading and navigating protected tabs is free.
 //
 // Mirroring: pinned tabs form logical GROUPS that exist in every normal
 // window. A new window gets a copy of each group; pinning a tab creates
-// copies elsewhere; a deliberate close or an unpin dissolves the group in
-// all windows. Copies are live independent instances of the same page -
+// copies elsewhere; unpinning keeps that tab as a regular one and closes
+// its copies. Copies are live independent instances of the same page -
 // navigation inside one copy is not forced onto its siblings.
 //
 // Snapshots: named sets of pinned tabs (storage.sync) plus a ring of the
@@ -33,15 +29,12 @@ importScripts("i18n.js");
 const DEFAULTS = {
   autoLockPinned: true,
   showIcon: true,
-  restoreClosed: true,
-  restoreCooldownSec: 15,
   mirrorPinned: true,
   autoSnapshot: true,
   language: "auto",
 };
 
 const SCRIPTABLE = /^(https?|file|ftp):/i;
-const RESTORE_MARKS_TTL_MS = 10 * 60 * 1000;
 // Chrome unpins a pinned tab moments before closing it, firing onUpdated
 // {pinned:false} and only then onRemoved. Within this window an unpin does
 // not yet count as "the user removed protection".
@@ -119,7 +112,6 @@ async function getTabState(tabId) {
 function newTabState(tab) {
   return {
     manual: null,
-    activated: false,
     protected: false,
     pinned: !!(tab && tab.pinned),
     url: tabUrl(tab),
@@ -164,9 +156,6 @@ function applyToTab(tabId, state, settings) {
     { frameId: 0 },
     checked,
   );
-  // Keep protected pages alive: a page discarded by the memory saver loses
-  // its beforeunload handler and would close silently.
-  chrome.tabs.update(tabId, { autoDiscardable: !state.protected }, checked);
   updateAction(tabId, state.protected);
 }
 
@@ -270,12 +259,12 @@ async function registerPinnedTab(tab, settings) {
   if (!settings.mirrorPinned) return;
   if (!tab || tab.id === undefined || tab.incognito) return;
   const mirror = await getMirror();
-  if (groupOfTab(mirror, tab.id)) {
+  const bound = groupOfTab(mirror, tab.id);
+  if (bound) {
     // Already bound (member recorded at create time). Consume the matching
     // pending record so it cannot mis-bind a future tab.
-    const gid = groupOfTab(mirror, tab.id);
     const stale = mirror.pending.findIndex(
-      (p) => p.windowId === tab.windowId && p.gid === gid,
+      (p) => p.windowId === tab.windowId && p.gid === bound,
     );
     if (stale !== -1) {
       mirror.pending.splice(stale, 1);
@@ -321,8 +310,8 @@ async function registerPinnedTab(tab, settings) {
   scheduleAutoSnapshot();
 }
 
-// Drop a group everywhere (deliberate close or confirmed unpin).
-// keepTabId survives (the tab the user unpinned stays as a regular tab).
+// Drop a group everywhere (confirmed unpin, or a close of an unprotected
+// pinned tab). keepTabId survives - the tab the user unpinned stays open.
 async function dissolveGroup(mirror, gid, keepTabId) {
   const group = mirror.groups[gid];
   if (!group) return;
@@ -387,7 +376,7 @@ async function bootstrapAll(injectScripts) {
     if (injectScripts && SCRIPTABLE.test(tab.url || "") && !tab.discarded) {
       chrome.scripting
         .executeScript({
-          target: { tabId: tab.id, allFrames: true },
+          target: { tabId: tab.id },
           files: ["content.js"],
           injectImmediately: true,
         })
@@ -410,7 +399,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // --- self-closed markers ------------------------------------------------
 // Tabs the extension closes itself (mirroring, snapshot restore) must not
-// be brought back by the restore net and must not re-propagate closes.
+// be reopened by the protection.
 async function markSelfClosed(tabIds) {
   const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
   const now = Date.now();
@@ -429,25 +418,19 @@ async function wasSelfClosed(tabId) {
   return true;
 }
 
-// Close tabs the extension owns (mirror copies, snapshot extras). Never a
-// dialog, never a partial failure:
-//   1. Ask each guard to stand down (a janky page may answer slowly - give
-//      it time, but do not wait forever).
-//   2. Discard the page: a discarded document has no beforeunload at all,
-//      so the close is guaranteed silent even if the disarm never arrived
-//      (chrome:// pages, frozen renderers). Discard can swap the tab id.
-//   3. Remove each tab individually - a batched tabs.remove() fails as a
+// Close tabs the extension owns (mirror copies, snapshot extras), silently
+// and without partial failures:
+//   1. Discard the page first: a discarded document runs no beforeunload,
+//      so a page's OWN unload handler (draft warnings etc.) cannot pop a
+//      dialog in a window the user is not even looking at.
+//   2. Remove each tab individually - a batched tabs.remove() fails as a
 //      whole when any single id is already gone, leaving survivors behind.
-// Marked self-closed first so the restore net ignores all of it.
+// Marked self-closed first so the protection does not reopen them.
 async function closeTabs(tabIds) {
   if (!tabIds.length) return;
   await markSelfClosed(tabIds);
   await Promise.all(
     tabIds.map(async (id) => {
-      await Promise.race([
-        quiet(chrome.tabs.sendMessage, id, { type: "disarm" }, { frameId: 0 }),
-        new Promise((resolve) => setTimeout(resolve, 1500)),
-      ]);
       const discarded = await quiet(chrome.tabs.discard, id);
       let finalId = id;
       if (discarded && discarded.id !== undefined && discarded.id !== id) {
@@ -475,37 +458,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     enqueue(async () => {
       const settings = await getSettings();
       const state = (await getTabState(tab.id)) || newTabState(tab);
-      if (request.top) {
-        // A fresh top-level document: its activation state starts over.
-        state.activated = !!request.hasBeenActive;
-      } else if (request.hasBeenActive) {
-        state.activated = true;
-      }
       state.pinned = !!tab.pinned;
       if (tabUrl(tab)) state.url = tabUrl(tab);
       state.protected = computeProtected(state, settings);
       await putTabState(tab.id, state);
-      if (request.top) {
-        chrome.tabs.update(tab.id, { autoDiscardable: !state.protected }, checked);
-        updateAction(tab.id, state.protected);
-      }
+      updateAction(tab.id, state.protected);
       sendResponse({ locked: state.protected, showIcon: settings.showIcon });
     }, "hello");
     return true; // async sendResponse
-  }
-
-  if (request.type === "activated") {
-    // The page received real user input: from now on Chrome will show the
-    // beforeunload dialog, so a close of this tab is a confirmed close.
-    enqueue(async () => {
-      const state = await getTabState(tab.id);
-      if (state && !state.activated) {
-        state.activated = true;
-        await putTabState(tab.id, state);
-      }
-      sendResponse({});
-    }, "activated");
-    return true;
   }
 });
 
@@ -526,26 +486,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const relevant =
     changeInfo.pinned !== undefined ||
     changeInfo.status === "loading" ||
-    changeInfo.discarded !== undefined ||
     changeInfo.url !== undefined;
   if (!relevant) return;
   enqueue(async () => {
     traceDiag(`updated tab=${tabId} change=${JSON.stringify(changeInfo)}`);
     const settings = await getSettings();
     const state = (await getTabState(tabId)) || newTabState(tab);
-    if (changeInfo.status === "loading" || changeInfo.discarded === true) {
-      // New document, or the document was dropped from memory: whatever
-      // activation the old document had is gone with it.
-      state.activated = false;
-    }
     state.pinned = !!tab.pinned;
     if (tabUrl(tab)) state.url = tabUrl(tab);
-    const wasProtected = state.protected;
     state.protected = computeProtected(state, settings);
-    if (wasProtected && !state.protected && changeInfo.pinned === false) {
+    if (changeInfo.pinned === false) {
       // Might be Chrome's own unpin-on-close; remember when it happened.
       state.unpinnedAt = Date.now();
-    } else if (state.protected) {
+    } else if (state.pinned) {
       state.unpinnedAt = null;
     }
     await putTabState(tabId, state);
@@ -612,7 +565,7 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
   }, "replaced");
 });
 
-// --- the restore net + mirrored close ----------------------------------------
+// --- the protection: a closed protected tab comes right back -----------------
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   enqueue(async () => {
     const state = await getTabState(tabId);
@@ -638,7 +591,7 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
       await putMirror(mirror);
     };
 
-    // Closed by the extension itself: no restore, no propagation.
+    // Closed by the extension itself: bookkeeping only.
     if (await wasSelfClosed(tabId)) {
       await finishMirror();
       return;
@@ -650,93 +603,95 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     }
     if (state.pinned || state.protected) scheduleAutoSnapshot();
 
-    // Whole window closing: its copies die with it, siblings elsewhere and
-    // the group survive; autosaves keep the set restorable either way.
+    // Whole window closing is a window-level act: its copies die with it,
+    // siblings elsewhere and the group survive; autosaves keep the set
+    // restorable when it was the only window.
     if (removeInfo.isWindowClosing) {
       await finishMirror();
       return;
     }
 
-    // A protection drop caused by an unpin milliseconds ago is Chrome's own
-    // unpin-on-close, not a user decision - the tab still counts as protected.
-    const closeUnpinGrace =
-      !state.protected &&
-      state.unpinnedAt &&
-      Date.now() - state.unpinnedAt < CLOSE_UNPIN_GRACE_MS;
+    // Chrome unpins a pinned tab milliseconds before closing it; within the
+    // grace window the tab still counts as pinned, NOT as user-unpinned.
+    const wasPinnedAtClose =
+      state.pinned ||
+      !!(state.unpinnedAt && Date.now() - state.unpinnedAt < CLOSE_UNPIN_GRACE_MS);
+    const protectedAtClose =
+      state.protected ||
+      (wasPinnedAtClose && computeProtected({ ...state, pinned: true }, settings));
 
-    const guarded = state.protected || closeUnpinGrace;
-
-    // Decide whether this close gets undone by the restore net.
-    let willRestore = false;
-    let restoreUrl = state.url || "";
-    if (guarded && !state.activated && settings.restoreClosed) {
-      const now = Date.now();
-      const { recentRestores = {} } = await chrome.storage.session.get("recentRestores");
-      for (const [markedUrl, ts] of Object.entries(recentRestores)) {
-        if (now - ts > RESTORE_MARKS_TTL_MS) delete recentRestores[markedUrl];
-      }
-      if (
-        recentRestores[restoreUrl] &&
-        now - recentRestores[restoreUrl] < settings.restoreCooldownSec * 1000
-      ) {
-        // Closed again right after a restore: deliberate, let it go.
-        await chrome.storage.session.set({ recentRestores });
-      } else {
-        recentRestores[restoreUrl] = now;
-        await chrome.storage.session.set({ recentRestores });
-        willRestore = true;
-      }
-    }
-
-    if (willRestore) {
-      // Group stays; the restored tab re-adopts it by page identity.
+    if (protectedAtClose) {
+      // The rule: protected tabs do not close. Bring it back, silently.
+      // The group stays; the reopened tab re-adopts it by page identity.
       await finishMirror();
-      await restoreTab(restoreUrl, settings);
+      await reopenTab(state, removeInfo.windowId, settings);
       return;
     }
 
-    // Deliberate close of a pinned tab: mirror it to the other windows.
-    if (gid && (state.pinned || closeUnpinGrace) && settings.mirrorPinned) {
+    // Unprotected pinned tab (autoLockPinned off): the close is legitimate;
+    // mirror it to the other windows so the set stays in sync.
+    if (gid && wasPinnedAtClose && settings.mirrorPinned) {
       await dissolveGroup(mirror, gid, null);
     }
     await finishMirror();
   }, "removed");
 });
 
-async function restoreTab(url, settings) {
-  // The closed tab can take a moment to appear in the sessions list.
-  for (let attempt = 0; attempt < 10; attempt++) {
+async function reopenTab(state, windowId, settings) {
+  const url = state.url || "";
+  let newTab = null;
+  // chrome.sessions preserves history, scroll and form state - try it first.
+  for (let attempt = 0; attempt < 8 && !newTab; attempt++) {
     let sessions = [];
     try {
       sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 25 });
     } catch {
-      return;
+      break;
     }
     const match = sessions.find((s) => s.tab && s.tab.sessionId && s.tab.url === url);
     if (match) {
-      try {
-        await chrome.sessions.restore(match.tab.sessionId);
-      } catch {
-        return;
+      const restored = await quiet(chrome.sessions.restore, match.tab.sessionId);
+      if (restored && restored.tab) {
+        newTab = restored.tab;
+        traceDiag(`reopen: session-restored ${pathKey(url)} -> ${newTab.id}`);
       }
-      notifyRestored(settings);
-      return;
+      break;
     }
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
-}
-
-function notifyRestored(settings) {
-  ensureI18n().then(() => {
-    chrome.notifications
-      .create({
-        type: "basic",
-        iconUrl: "icons/locked-128.png",
-        title: tpI18n.t("notifTitle"),
-        message: tpI18n.t("notifMsg", [settings.restoreCooldownSec]),
-      })
-      .catch(() => {});
-  });
+  if (!newTab) {
+    // Fallback: plain re-create (at the end of the pin strip when pinned).
+    const target = {};
+    if (windowId !== undefined && windowId !== chrome.windows.WINDOW_ID_NONE) {
+      const win = await quiet(chrome.windows.get, windowId);
+      if (win) target.windowId = windowId;
+    }
+    const wasPinned = state.pinned || state.unpinnedAt !== null;
+    const pinnedCount =
+      wasPinned && target.windowId
+        ? (await quiet(chrome.tabs.query, { windowId: target.windowId, pinned: true }) || [])
+            .length
+        : undefined;
+    newTab = await quiet(chrome.tabs.create, {
+      ...target,
+      url: url || undefined,
+      pinned: wasPinned,
+      active: false,
+      ...(pinnedCount !== undefined ? { index: pinnedCount } : {}),
+    });
+    traceDiag(`reopen: re-created ${pathKey(url)} -> ${newTab ? newTab.id : "failed"}`);
+  }
+  // Carry a manual lock over to the reopened tab - the protection must not
+  // evaporate just because the tab id changed.
+  if (newTab && newTab.id !== undefined && state.manual === true) {
+    const carried = (await getTabState(newTab.id)) || newTabState(newTab);
+    carried.manual = true;
+    carried.pinned = !!newTab.pinned;
+    if (url) carried.url = url;
+    carried.protected = computeProtected(carried, settings);
+    await putTabState(newTab.id, carried);
+    applyToTab(newTab.id, carried, settings);
+  }
 }
 
 // --- window lifecycle ---------------------------------------------------------
@@ -1002,18 +957,6 @@ globalThis.truePinToggle = async (tabId) => {
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
-// Test hook: propagate a deliberate close of the group containing tabId
-// (closes every member, disarming guards first) - the mirror path from the
-// bug report, without driving a real close/confirm through puppeteer.
-globalThis.__tpCloseGroupOf = (tabId) =>
-  enqueue(async () => {
-    const mirror = await getMirror();
-    const gid = groupOfTab(mirror, tabId);
-    if (!gid) return { closed: false };
-    await dissolveGroup(mirror, gid, null);
-    await putMirror(mirror);
-    return { closed: true };
-  }, "test-close-group");
 
 // --- popup UI backend -----------------------------------------------------------
 async function handleUi(request) {

@@ -1,15 +1,11 @@
-// E2E suite for TruePin. Drives a real Chrome (for Testing) with
-// the unpacked extension and verifies both protection layers:
-//   1. beforeunload dialog on interacted, protected tabs;
-//   2. silent-close auto-restore for non-interacted tabs + cooldown override.
+// E2E suite for TruePin v3. Drives a real Chrome (for Testing) with the
+// unpacked extension and verifies the one-rule protection model:
+//   a protected tab cannot be closed - any close is silently undone;
+//   the only sanctioned path is unpin (or unlock) first, then close.
+// Plus: mirroring across windows, snapshots, the autosave ring, i18n.
 //
-// Rules the suite lives by:
-// - The initial about:blank tab is never closed, so single-tab closes never
-//   count as "window closing" (which the extension deliberately lets through).
-// - Pages that must stay activation-free are NEVER touched with
-//   page.evaluate()/page.title(): Puppeteer evaluates with userGesture=true,
-//   which would grant the page user activation and break the scenario.
-//   Everything is asserted from the service worker side instead.
+// The initial about:blank tab is never closed, so single-tab closes never
+// count as "window closing" (which the protection deliberately lets go).
 //
 // Run: npm test   (HEADFUL=1 npm test to watch)
 
@@ -20,7 +16,7 @@ import puppeteer from "puppeteer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_DIR = path.resolve(__dirname, "../extension");
-const TEST_TIMEOUT_MS = 45_000;
+const TEST_TIMEOUT_MS = 60_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -104,7 +100,9 @@ const findTab = (marker) =>
   swEval(async (m) => {
     const tabs = await chrome.tabs.query({});
     const tab = tabs.find((t) => ((t.url || t.pendingUrl) || "").includes(m));
-    return tab ? { id: tab.id, pinned: tab.pinned, title: tab.title || "" } : null;
+    return tab
+      ? { id: tab.id, pinned: tab.pinned, title: tab.title || "", windowId: tab.windowId }
+      : null;
   }, marker);
 
 const tabState = (tabId) =>
@@ -113,7 +111,14 @@ const tabState = (tabId) =>
 const setPinned = (tabId, pinned) =>
   swEval((id, p) => chrome.tabs.update(id, { pinned: p }), tabId, pinned);
 
-const removeTab = (tabId) => swEval((id) => chrome.tabs.remove(id), tabId);
+const removeTab = (tabId) =>
+  swEval(
+    (id) => new Promise((resolve) => chrome.tabs.remove(id, () => {
+      void chrome.runtime.lastError;
+      resolve();
+    })),
+    tabId,
+  );
 
 function watchDialogs(page) {
   const seen = [];
@@ -142,6 +147,24 @@ async function clickPage(page, marker) {
       throw new Error("click timed out");
     }),
   ]);
+}
+
+// Close-and-expect-reopen helper: the tab must come back with the same url,
+// pinned, under a NEW tab id.
+async function closeAndExpectReopen(marker, closeFn) {
+  const before = await findTab(marker);
+  assert(before, `${marker} present before close`);
+  await closeFn(before);
+  const after = await waitFor(
+    `${marker} reopened`,
+    async () => {
+      const t = await findTab(marker);
+      return t && t.id !== before.id ? t : null;
+    },
+    10_000,
+    200,
+  );
+  return { before, after };
 }
 
 // ----------------------------------------------------------------- server
@@ -207,127 +230,124 @@ async function main() {
     assert(settings === "defaults" || settings.autoLockPinned, "autoLockPinned on");
   });
 
-  await test("pinned + interacted tab: close shows beforeunload dialog", async () => {
-    const { page, dialogs, tab } = await openPage("/one");
+  await test("protection: force-closed pinned tab comes right back", async () => {
+    const { dialogs, tab } = await openPage("/one");
     step("pin");
     await setPinned(tab.id, true);
     await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
-    // Title prefix proves the apply message reached the content script.
+    await waitFor("🔒 title", async () => ((await findTab("/one"))?.title || "").startsWith("🔒"));
+
+    step("close via tabs.remove");
+    const { after } = await closeAndExpectReopen("/one", (t) => removeTab(t.id));
+    assert(after.pinned === true, "reopened pinned");
+    assert(dialogs.length === 0, "no dialog anywhere");
     await waitFor(
-      "🔒 title",
+      "reopened tab re-protected",
+      async () => (await tabState(after.id))?.protected === true,
+    );
+  });
+
+  await test("protection: user-style close (runBeforeUnload) - no dialog, still comes back", async () => {
+    const existing = await findTab("/one");
+    assert(existing, "/one still around from the previous test");
+    step("activate the page");
+    const pages = await browser.pages();
+    const page = pages.find((p) => p.url().includes("/one"));
+    assert(page, "page handle");
+    const dialogs = watchDialogs(page);
+    await clickPage(page, "/one");
+    step("close with runBeforeUnload");
+    const { after } = await closeAndExpectReopen("/one", async () => {
+      await Promise.race([page.close({ runBeforeUnload: true }).catch(() => {}), sleep(3000)]);
+    });
+    assert(dialogs.length === 0, "no beforeunload dialog even on an activated tab");
+    assert(after.pinned === true, "reopened pinned");
+  });
+
+  await test("protection: closing the reopened tab again just brings it back again", async () => {
+    const tab = await findTab("/one");
+    step("close again immediately");
+    const { after } = await closeAndExpectReopen("/one", (t) => removeTab(t.id));
+    assert(after.pinned === true, "still immortal - no cooldown escape");
+    void tab;
+  });
+
+  await test("protection: reload and navigation are free, no dialogs", async () => {
+    const tab = await findTab("/one");
+    const pages = await browser.pages();
+    const page = pages.find((p) => p.url().includes("/one"));
+    assert(page, "page handle for the reopened /one");
+    const dialogs = watchDialogs(page);
+    step("activate");
+    await clickPage(page, "/one");
+    step("scripted reload");
+    await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1500)]);
+    await waitFor(
+      "reloaded and still protected",
       async () => ((await findTab("/one"))?.title || "").startsWith("🔒"),
     );
-    await clickPage(page, "/one");
-    await waitFor("activation recorded", async () => (await tabState(tab.id))?.activated === true);
-
-    step("close with runBeforeUnload");
-    page.close({ runBeforeUnload: true }).catch(() => {});
-    await waitFor("dialog shown", () => dialogs.length > 0, 6000);
-    assert(dialogs[0].type === "beforeunload", `dialog type ${dialogs[0].type}`);
-    step("verify tab survived");
-    await sleep(400);
-    assert(await findTab("/one"), "tab survived after dismissing the dialog");
-
-    // Cleanup: CDP force-close skips beforeunload entirely; the tab had
-    // activation, so the extension must NOT restore it.
-    step("cleanup force close");
-    await page.close().catch(() => {});
-    await sleep(800);
-    assert(!(await findTab("/one")), "activated tab is not restored after force close");
+    step("navigate to another page");
+    await swEval((id, url) => chrome.tabs.update(id, { url }), tab.id, `${baseUrl}/one-nav`);
+    await waitFor("navigated", async () => !!(await findTab("/one-nav")));
+    assert(dialogs.length === 0, "no dialogs for reload or navigation");
+    step("cleanup: unpin and close");
+    await setPinned(tab.id, false);
+    await sleep(900);
+    await removeTab(tab.id);
+    await sleep(500);
+    assert(!(await findTab("/one-nav")), "cleanup close respected after unpin");
   });
 
-  let restoredTabId = null;
-
-  await test("pinned, never interacted: silent close is auto-restored pinned", async () => {
-    const { page, dialogs, tab } = await openPage("/two");
-    step("pin");
-    await setPinned(tab.id, true);
-    await waitFor("protected", async () => {
-      const s = await tabState(tab.id);
-      return s?.protected === true && (s.url || "").includes("/two");
-    });
-
-    step("silent close");
-    await Promise.race([page.close({ runBeforeUnload: true }).catch(() => {}), sleep(4000)]);
-    const restored = await waitFor(
-      "restored tab",
-      async () => {
-        const t = await findTab("/two");
-        return t && t.id !== tab.id ? t : null;
-      },
-      10_000,
-    );
-    assert(dialogs.length === 0, "no dialog without user activation");
-    assert(restored.pinned === true, "restored tab came back pinned");
-    await waitFor("restored tab re-protected", async () => {
-      const s = await tabState(restored.id);
-      return s?.protected === true && (s.url || "").includes("/two");
-    });
-    restoredTabId = restored.id;
-  });
-
-  await test("second silent close within cooldown is deliberate: stays closed", async () => {
-    assert(restoredTabId !== null, "previous test restored a tab");
-    step("remove restored tab");
-    await removeTab(restoredTabId);
-    step("wait to confirm it stays closed");
-    await sleep(2500);
-    assert(!(await findTab("/two")), "tab stayed closed on second close");
-  });
-
-  await test("unpinning removes protection: closes without dialog or restore", async () => {
-    const { page, dialogs, tab } = await openPage("/three");
+  await test("sanctioned path: unpin, then close - tab stays closed", async () => {
+    const { tab } = await openPage("/two");
     step("pin");
     await setPinned(tab.id, true);
     await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
     step("unpin");
     await setPinned(tab.id, false);
     await waitFor("unprotected", async () => (await tabState(tab.id))?.protected === false);
-    await clickPage(page, "/three");
-
+    await sleep(900); // unpin grace + unpin-confirm must both pass
     step("close");
-    await Promise.race([page.close({ runBeforeUnload: true }).catch(() => {}), sleep(4000)]);
+    await removeTab(tab.id);
     await sleep(1500);
-    assert(dialogs.length === 0, "no dialog on unprotected tab");
-    assert(!(await findTab("/three")), "tab closed and was not restored");
+    assert(!(await findTab("/two")), "closed for good after unpin");
   });
 
-  await test("toolbar toggle locks a regular tab: dialog appears", async () => {
-    const { page, dialogs, tab } = await openPage("/four");
-    step("toggle lock");
+  await test("manual lock: locked tab is immortal until unlocked", async () => {
+    const { tab } = await openPage("/three");
+    step("lock via toggle");
     await swEval((id) => globalThis.truePinToggle(id), tab.id);
     await waitFor("manually protected", async () => {
       const s = await tabState(tab.id);
       return s?.protected === true && s.manual === true;
     });
-    await clickPage(page, "/four");
-    await waitFor("activation recorded", async () => (await tabState(tab.id))?.activated === true);
-
-    step("close with runBeforeUnload");
-    page.close({ runBeforeUnload: true }).catch(() => {});
-    await waitFor("dialog shown", () => dialogs.length > 0, 6000);
-    assert(dialogs[0].type === "beforeunload", "beforeunload dialog");
-    step("verify tab survived");
-    await sleep(300);
-    assert(await findTab("/four"), "tab survived");
-    step("cleanup force close");
-    await page.close().catch(() => {});
-    await sleep(800);
-    assert(!(await findTab("/four")), "activated tab is not restored after force close");
+    step("close: must come back");
+    const { after } = await closeAndExpectReopen("/three", (t) => removeTab(t.id));
+    assert(after.pinned === false, "reopened as a regular (unpinned) tab");
+    await waitFor("manual lock carried over", async () => {
+      const s = await tabState(after.id);
+      return s?.protected === true && s.manual === true;
+    });
+    step("unlock, then close: stays closed");
+    await swEval((id) => globalThis.truePinToggle(id), after.id);
+    await waitFor("unlocked", async () => (await tabState(after.id))?.protected === false);
+    await removeTab(after.id);
+    await sleep(1200);
+    assert(!(await findTab("/three")), "closed for good after unlock");
   });
 
   await test("plain unpinned tab: untouched by the extension", async () => {
-    const { page, dialogs, tab } = await openPage("/five");
-    await clickPage(page, "/five");
+    const { page, dialogs, tab } = await openPage("/four");
+    await clickPage(page, "/four");
     step("close");
-    await Promise.race([page.close({ runBeforeUnload: true }).catch(() => {}), sleep(4000)]);
+    await Promise.race([page.close({ runBeforeUnload: true }).catch(() => {}), sleep(3000)]);
     await sleep(1200);
     assert(dialogs.length === 0, "no dialog");
-    assert(!(await findTab("/five")), "closed for good");
+    assert(!(await findTab("/four")), "closed for good");
     void tab;
   });
 
-  await test("autoLockPinned=false disables auto-protection; re-enable recomputes", async () => {
+  await test("autoLockPinned=false: pinned tabs close freely; re-enable recomputes", async () => {
     const write = (auto) =>
       swEval(
         (a) =>
@@ -335,74 +355,36 @@ async function main() {
             settings: {
               autoLockPinned: a,
               showIcon: true,
-              restoreClosed: true,
-              restoreCooldownSec: 15,
+              mirrorPinned: true,
+              autoSnapshot: true,
+              language: "auto",
             },
           }),
         auto,
       );
-    step("disable autoLockPinned");
-    await write(false);
-    const { tab } = await openPage("/six");
-    step("pin");
-    await setPinned(tab.id, true);
-    await sleep(1000);
-    assert((await tabState(tab.id))?.protected !== true, "not protected while disabled");
-    step("re-enable autoLockPinned");
-    await write(true);
+    try {
+      step("disable autoLockPinned");
+      await write(false);
+      await sleep(500);
+      const { tab } = await openPage("/five");
+      step("pin");
+      await setPinned(tab.id, true);
+      await sleep(1000);
+      assert((await tabState(tab.id))?.protected !== true, "not protected while disabled");
+      step("close: no resurrection");
+      await removeTab(tab.id);
+      await sleep(1500);
+      assert(!(await findTab("/five")), "closed while protection is off");
+    } finally {
+      step("re-enable");
+      await write(true); // never leak disabled protection into later tests
+    }
+    const { tab: tab2 } = await openPage("/six");
+    await setPinned(tab2.id, true);
     await waitFor(
       "protected after re-enable",
-      async () => (await tabState(tab.id))?.protected === true,
+      async () => (await tabState(tab2.id))?.protected === true,
     );
-  });
-
-  await test("reload: hotkey reload passes silently, plain reload still asks", async () => {
-    const clickRetry = async (page, marker) => {
-      // A click right after a reload can race the new execution context.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await clickPage(page, marker);
-          return;
-        } catch (err) {
-          if (attempt >= 3) throw err;
-          await sleep(700);
-        }
-      }
-    };
-    const { page, dialogs, tab } = await openPage("/r1");
-    try {
-      step("pin and activate");
-      await setPinned(tab.id, true);
-      await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
-      await waitFor("🔒 title", async () => ((await findTab("/r1"))?.title || "").startsWith("🔒"));
-      await clickRetry(page, "/r1");
-      await waitFor("activated", async () => (await tabState(tab.id))?.activated === true);
-
-      step("reload via hotkey: no dialog");
-      await page.keyboard.down("Control");
-      await page.keyboard.press("KeyR");
-      await page.keyboard.up("Control");
-      await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1000)]);
-      await waitFor(
-        "page reloaded and re-protected",
-        async () => ((await findTab("/r1"))?.title || "").startsWith("🔒"),
-        8000,
-      );
-      assert(dialogs.length === 0, "no dialog on hotkey reload");
-      await sleep(800); // let the new document settle before touching it
-
-      step("plain scripted reload: dialog appears");
-      await clickRetry(page, "/r1"); // fresh document needs fresh activation
-      await waitFor("re-activated", async () => (await tabState(tab.id))?.activated === true);
-      await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1500)]);
-      await waitFor("dialog shown", () => dialogs.length > 0, 6000);
-      assert(dialogs[0].type === "beforeunload", "guard still works without the hotkey");
-      await sleep(300);
-    } finally {
-      // Never leak the pinned /r1 into later tests, pass or fail.
-      await page.close().catch(() => {});
-      await sleep(600);
-    }
   });
 
   // ---- snapshots + autosave ring + mirroring + i18n -----------------------
@@ -424,8 +406,21 @@ async function main() {
   let s1TabId = null;
 
   await test("snapshot: save, mutate, diff-restore (reuse + create + close extra)", async () => {
-    // Fresh slate: earlier tests (and their failures) must not leak pins in.
-    step("fresh slate: unpin and close all pinned tabs");
+    // Fresh slate: earlier tests (and their failures) must not leak pins
+    // or settings in.
+    step("fresh slate: default settings, unpin and close all pinned tabs");
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: {
+          autoLockPinned: true,
+          showIcon: true,
+          mirrorPinned: true,
+          autoSnapshot: true,
+          language: "auto",
+        },
+      }),
+    );
+    await sleep(600);
     const leftovers = await swEval(async () =>
       (await chrome.tabs.query({ pinned: true })).map((t) => t.id),
     );
@@ -500,7 +495,7 @@ async function main() {
         pins[0].id === s1TabId
       );
     });
-    await sleep(1500); // the closed extra must not be resurrected by the restore net
+    await sleep(1500); // the closed extra was protected - it must NOT resurrect
     assert(!(await findTab("/s3")), "extra tab stays closed (self-close guard)");
     const ring = await autoRing();
     assert(
@@ -615,7 +610,7 @@ async function main() {
         const pins = await pinnedOf(mirrorWinId);
         return pins.length === 2 && pins[0].url.includes("/s1b") && pins[1].url.includes("/s2");
       },
-      8000,
+      10_000,
       250,
     );
     step("verify originals stayed");
@@ -652,20 +647,15 @@ async function main() {
         );
         return pins.length === 2 && all === 3;
       },
-      8000,
+      10_000,
       250,
     );
     const own = await findTab("/g1");
     assert(own && own.pinned === false, "the window's own tab stays unpinned");
   });
 
-  let m1Page = null;
-  let m1TabId = null;
-
   await test("mirror: pinning a tab creates copies in every window", async () => {
     const m = await openPage("/m1"); // opens in the first window
-    m1Page = m.page;
-    m1TabId = m.tab.id;
     step("pin /m1");
     await setPinned(m.tab.id, true);
     await waitFor(
@@ -678,119 +668,70 @@ async function main() {
         }
         return counts.every((n) => n === 1);
       },
-      8000,
+      10_000,
       250,
     );
   });
 
-  await test("mirror: deliberate close of a pinned tab closes its copies", async () => {
-    // Activate the original (not a mirror copy) so its close is deliberate.
-    assert(m1Page && m1TabId, "original /m1 handle from the previous test");
-    await clickPage(m1Page, "/m1");
+  await test("mirror: closing a copy reopens it in place, siblings untouched", async () => {
+    const copies = await pinnedOf(mirrorWinId);
+    const copy = copies.find((p) => p.url.includes("/m1"));
+    assert(copy, "/m1 copy in the mirror window");
+    const originalBefore = (await pinnedOf(snapWindowId)).find((p) => p.url.includes("/m1"));
+    step("close the copy");
+    await removeTab(copy.id);
     await waitFor(
-      "activation recorded",
-      async () => (await tabState(m1TabId))?.activated === true,
-    );
-    step("force close the original");
-    await m1Page.close().catch(() => {});
-    await waitFor(
-      "all /m1 copies closed everywhere",
+      "copy reopened in the same window",
       async () => {
-        for (const wid of [snapWindowId, mirrorWinId, urlWinId]) {
+        const pins = await pinnedOf(mirrorWinId);
+        const back = pins.find((p) => p.url.includes("/m1"));
+        return back && back.id !== copy.id ? back : null;
+      },
+      10_000,
+      250,
+    );
+    const originalAfter = (await pinnedOf(snapWindowId)).find((p) => p.url.includes("/m1"));
+    assert(
+      originalAfter && originalAfter.id === originalBefore.id,
+      "original in the first window untouched",
+    );
+    step("verify each window still has exactly one /m1");
+    for (const wid of [snapWindowId, mirrorWinId, urlWinId]) {
+      const count = (await pinnedOf(wid)).filter((p) => p.url.includes("/m1")).length;
+      assert(count === 1, `window ${wid}: one /m1 (got ${count})`);
+    }
+  });
+
+  await test("mirror: unpin dissolves copies; the unpinned original then closes for good", async () => {
+    const original = (await pinnedOf(snapWindowId)).find((p) => p.url.includes("/m1"));
+    assert(original, "/m1 original present");
+    step("unpin /m1 in the first window");
+    await setPinned(original.id, false);
+    await waitFor(
+      "/m1 copies closed in other windows",
+      async () => {
+        for (const wid of [mirrorWinId, urlWinId]) {
           const pins = await pinnedOf(wid);
           if (pins.some((p) => p.url.includes("/m1"))) return false;
         }
         return true;
       },
-      8000,
+      10_000,
       250,
     );
-    await sleep(1500);
-    assert(!(await findTab("/m1")), "no /m1 resurrected anywhere");
-  });
-
-  await test("mirror: propagated close is silent on an activated sibling (no stray dialog)", async () => {
-    // Regression for the reported bug: force-closing an activated pinned tab
-    // in one window popped a "Leave site?" dialog in another window while its
-    // mirror copy was being closed. Both the copy and its sibling are
-    // activated here; neither window may raise a beforeunload dialog.
-    step("open, pin and activate /fbc");
-    const orig = await openPage("/fbc");
-    await setPinned(orig.tab.id, true);
-    await waitFor("protected", async () => (await tabState(orig.tab.id))?.protected === true);
-    await clickPage(orig.page, "/fbc");
-    await waitFor("original activated", async () => (await tabState(orig.tab.id))?.activated === true);
-
-    step("create a second window and wait for its /fbc copy");
-    const pagesBefore = new Set(await browser.pages());
-    const winB = await swEval(async () => (await chrome.windows.create({})).id);
-    const copyTabId = await waitFor(
-      "copy tab in window B",
-      async () => {
-        const copy = (await pinnedOf(winB)).find((p) => p.url.includes("/fbc"));
-        return copy ? copy.id : null;
-      },
-      8000,
-      250,
-    );
-
-    step("activate the copy in window B");
-    const copyPage = (await browser.pages()).find(
-      (p) => !pagesBefore.has(p) && p.url().includes("/fbc"),
-    );
-    assert(copyPage, "copy page handle found");
-    const copyDialogs = watchDialogs(copyPage);
-    await copyPage.bringToFront();
-    await clickPage(copyPage, "/fbc(copy)");
-    await waitFor("copy activated", async () => (await tabState(copyTabId))?.activated === true);
-
-    step("propagate a deliberate close across the group");
-    await swEval((id) => globalThis.__tpCloseGroupOf(id), copyTabId);
-
-    step("verify siblings closed with no beforeunload dialog");
-    await waitFor("all /fbc gone", async () => !(await findTab("/fbc")), 8000, 250);
-    await sleep(800);
-    assert(
-      orig.dialogs.every((d) => d.type !== "beforeunload"),
-      `no dialog in the original window (saw ${JSON.stringify(orig.dialogs)})`,
-    );
-    assert(
-      copyDialogs.every((d) => d.type !== "beforeunload"),
-      `no dialog in the copy window (saw ${JSON.stringify(copyDialogs)})`,
-    );
-    step("close window B");
-    await swEval((id) => chrome.windows.remove(id).catch(() => {}), winB);
-    await sleep(400);
-  });
-
-  await test("mirror: unpinning keeps the tab but closes its copies elsewhere", async () => {
-    const s2 = (await pinnedOf(snapWindowId)).find((p) => p.url.includes("/s2"));
-    assert(s2, "/s2 original present");
-    step("unpin /s2 in the first window");
-    await setPinned(s2.id, false);
-    await waitFor(
-      "/s2 copies closed in other windows",
-      async () => {
-        for (const wid of [mirrorWinId, urlWinId]) {
-          const pins = await pinnedOf(wid);
-          if (pins.some((p) => p.url.includes("/s2"))) return false;
-        }
-        return true;
-      },
-      8000,
-      250,
-    );
-    const still = await findTab("/s2");
+    const still = await findTab("/m1");
     assert(still && still.pinned === false, "unpinned original stays open as a regular tab");
-    step("cleanup: close the unpinned /s2");
+    step("close the unpinned original: stays closed");
     await sleep(900);
-    await removeTab(s2.id);
+    await removeTab(still.id);
+    await sleep(1500);
+    assert(!(await findTab("/m1")), "gone for good everywhere");
   });
 
   await test("mirror: a window arriving with its own pin is adopted, not duplicated", async () => {
     // Simulates a session-restored window: it shows up already containing a
     // pin of an existing group. The fill must adopt it instead of creating
-    // a second copy - the duplicate bug from the report.
+    // a second copy.
     const groupUrl = (await pinnedOf(snapWindowId))[0].url;
     step("create window preloaded with the group's url and pin it quickly");
     const winC = await swEval(async (u) => {
@@ -812,9 +753,17 @@ async function main() {
       const count = winPins.filter((p) => p.url.split("?")[0] === groupUrl.split("?")[0]).length;
       assert(count === 1, `window ${wid} still has exactly one (got ${count})`);
     }
-    step("close the extra window");
+    step("close the extra window (window close is not resisted)");
     await swEval((id) => chrome.windows.remove(id).catch(() => {}), winC);
-    await sleep(500);
+    await sleep(800);
+    const counts = [];
+    for (const wid of [snapWindowId, mirrorWinId, urlWinId]) {
+      counts.push((await pinnedOf(wid)).length);
+    }
+    assert(
+      counts.every((n) => n === counts[0]),
+      "closing a whole window resurrected nothing",
+    );
   });
 
   await test("mirrorPinned=false: new window stays empty, groups cleared", async () => {
@@ -824,8 +773,6 @@ async function main() {
         settings: {
           autoLockPinned: true,
           showIcon: true,
-          restoreClosed: true,
-          restoreCooldownSec: 15,
           mirrorPinned: false,
           autoSnapshot: true,
           language: "auto",
@@ -883,7 +830,7 @@ async function main() {
 const watchdog = setTimeout(() => {
   console.error(`global timeout (last step: ${currentStep})`);
   process.exit(2);
-}, 300_000);
+}, 420_000);
 watchdog.unref();
 
 main()
