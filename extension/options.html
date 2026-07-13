@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>TruePin - настройки</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      body {
+        margin: 16px;
+        min-width: 380px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      label {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        margin: 10px 0 2px;
+      }
+      .hint {
+        color: color-mix(in srgb, currentColor 60%, transparent);
+        font-size: 12px;
+        margin: 0 0 6px 26px;
+      }
+      .num {
+        width: 60px;
+      }
+      #saved {
+        font-size: 12px;
+        color: #2e7d32;
+        visibility: hidden;
+        margin: 10px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>TruePin</h2>
+
+    <label>
+      <input type="checkbox" id="autoLockPinned" />
+      Автоматически защищать закреплённые вкладки
+    </label>
+    <p class="hint">Снятие закрепления снимает и защиту.</p>
+
+    <label>
+      <input type="checkbox" id="showIcon" />
+      Добавлять 🔒 к заголовку защищённой вкладки
+    </label>
+
+    <label>
+      <input type="checkbox" id="restoreClosed" />
+      Восстанавливать защищённую вкладку, закрытую без подтверждения
+    </label>
+    <p class="hint">
+      Chrome показывает диалог «Leave site?» только после взаимодействия со
+      страницей. Если защищённая вкладка закрылась тихо (страница ещё не
+      трогалась, выгружена из памяти, chrome://) - расширение вернёт её на
+      место.
+    </p>
+
+    <label>
+      Повторное закрытие в течение
+      <input type="number" id="restoreCooldownSec" class="num" min="3" max="120" />
+      секунд закрывает насовсем
+    </label>
+
+    <p id="saved">Сохранено</p>
+
+    <script src="options.js"></script>
+  </body>
+</html>
