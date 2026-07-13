@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Configurações"
+  },
+  "popupAutoLockLabel": {
+    "message": "Proteger as abas fixadas"
+  },
+  "optIconStyle": {
+    "message": "Ícone da barra"
+  },
+  "iconStyleColor": {
+    "message": "Colorida (âmbar)"
+  },
+  "iconStyleMono": {
+    "message": "Como a interface (cinza)"
+  },
+  "optNotify": {
+    "message": "Notificar quando uma aba protegida voltar"
+  },
+  "notifReopenedPinned": {
+    "message": "Abas fixadas não fecham. Desafixe para fechar."
+  },
+  "notifReopenedManual": {
+    "message": "Esta aba está travada. Destrave no popup para fechar."
   }
 }

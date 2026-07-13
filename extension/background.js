@@ -31,6 +31,8 @@ const DEFAULTS = {
   showIcon: true,
   mirrorPinned: true,
   autoSnapshot: true,
+  notifyReopen: true,
+  iconStyle: "color", // "color" | "mono" (match browser UI)
   language: "auto",
 };
 
@@ -104,6 +106,16 @@ function pathKey(url) {
   }
 }
 
+// Looser identity for adoption fallback: SPA copies of the same app diverge
+// in path (chatgpt.com/ vs chatgpt.com/c/xyz) but share the origin.
+function originKey(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url || "";
+  }
+}
+
 async function getTabState(tabId) {
   const record = await chrome.storage.session.get(stateKey(tabId));
   return record[stateKey(tabId)] || null;
@@ -156,11 +168,12 @@ function applyToTab(tabId, state, settings) {
     { frameId: 0 },
     checked,
   );
-  updateAction(tabId, state.protected);
+  updateAction(tabId, state.protected, settings);
 }
 
-function updateAction(tabId, isProtected) {
-  const variant = isProtected ? "locked" : "unlocked";
+function updateAction(tabId, isProtected, settings) {
+  const mono = settings && settings.iconStyle === "mono" ? "-mono" : "";
+  const variant = (isProtected ? "locked" : "unlocked") + mono;
   chrome.action.setIcon(
     {
       tabId,
@@ -285,26 +298,52 @@ async function registerPinnedTab(tab, settings) {
     return;
   }
 
-  const adoptable = mirror.order.find((gid) => {
-    const group = mirror.groups[gid];
-    return group && group.members[tab.windowId] === undefined && pathKey(group.url) === pathKey(url);
-  });
+  // Join an existing group: exact page match first, same-origin fallback
+  // (SPA copies diverge in path but stay the same app).
+  const adoptable =
+    mirror.order.find((gid) => {
+      const group = mirror.groups[gid];
+      return (
+        group && group.members[tab.windowId] === undefined && pathKey(group.url) === pathKey(url)
+      );
+    }) ||
+    mirror.order.find((gid) => {
+      const group = mirror.groups[gid];
+      return (
+        group &&
+        group.members[tab.windowId] === undefined &&
+        originKey(group.url) === originKey(url)
+      );
+    });
   if (adoptable) {
     mirror.groups[adoptable].members[tab.windowId] = tab.id;
     await putMirror(mirror);
     return;
   }
 
-  // New group: user pinned a tab. Mirror it into every other window.
+  // New group: user pinned a tab. Mirror it into every other window -
+  // ADOPTING an existing matching pin there before ever creating a copy
+  // (blind creation is how an extension reload used to duplicate the set).
   const gid = await nextGid();
   mirror.groups[gid] = { url, members: { [tab.windowId]: tab.id } };
   const position = Math.min(Math.max(tab.index, 0), mirror.order.length);
   mirror.order.splice(position, 0, gid);
   traceDiag(`group ${gid} created for ${pathKey(url)} @win=${tab.windowId}`);
   for (const w of await normalWindows()) {
-    if (w.id !== tab.windowId && mirror.groups[gid].members[w.id] === undefined) {
-      await createCopy(mirror, gid, w.id, position);
+    if (w.id === tab.windowId || mirror.groups[gid].members[w.id] !== undefined) continue;
+    const candidates = (await quiet(chrome.tabs.query, { windowId: w.id, pinned: true })) || [];
+    const free =
+      candidates.find(
+        (t) => !groupOfTab(mirror, t.id) && pathKey(tabUrl(t)) === pathKey(url),
+      ) ||
+      candidates.find(
+        (t) => !groupOfTab(mirror, t.id) && originKey(tabUrl(t)) === originKey(url),
+      );
+    if (free) {
+      mirror.groups[gid].members[w.id] = free.id;
+      continue;
     }
+    await createCopy(mirror, gid, w.id, position);
   }
   await putMirror(mirror);
   scheduleAutoSnapshot();
@@ -462,7 +501,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (tabUrl(tab)) state.url = tabUrl(tab);
       state.protected = computeProtected(state, settings);
       await putTabState(tab.id, state);
-      updateAction(tab.id, state.protected);
+      updateAction(tab.id, state.protected, settings);
       sendResponse({ locked: state.protected, showIcon: settings.showIcon });
     }, "hello");
     return true; // async sendResponse
@@ -692,6 +731,26 @@ async function reopenTab(state, windowId, settings) {
     await putTabState(newTab.id, carried);
     applyToTab(newTab.id, carried, settings);
   }
+  if (newTab && settings.notifyReopen) notifyReopened(state.manual === true);
+}
+
+// One short notification; a fixed id keeps repeats from stacking up.
+function notifyReopened(isManualLock) {
+  ensureI18n().then(() => {
+    chrome.notifications.clear("truepin-reopen", () => {
+      void chrome.runtime.lastError;
+      chrome.notifications.create(
+        "truepin-reopen",
+        {
+          type: "basic",
+          iconUrl: "icons/locked-128.png",
+          title: "TruePin",
+          message: tpI18n.t(isManualLock ? "notifReopenedManual" : "notifReopenedPinned"),
+        },
+        checked,
+      );
+    });
+  });
 }
 
 // --- window lifecycle ---------------------------------------------------------
@@ -957,6 +1016,15 @@ globalThis.truePinToggle = async (tabId) => {
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
+// Test hook: what a chrome://extensions Reload does to our state - the SW
+// restarts with storage.session wiped and runs the install bootstrap.
+globalThis.__tpSimulateReload = () => {
+  chrome.storage.session.clear(() => {
+    void chrome.runtime.lastError;
+    enqueue(() => bootstrapAll(true), "test-reload");
+  });
+  return true;
+};
 
 // --- popup UI backend -----------------------------------------------------------
 async function handleUi(request) {
@@ -995,6 +1063,11 @@ async function handleUi(request) {
       if (!tab) return { error: "hintPlain" };
       const state = await toggleTab(tab);
       return { ok: true, protected: state.protected };
+    }
+    case "ui:setAutoLock": {
+      // The popup's toggle on a pinned tab drives the GLOBAL auto-protection.
+      await chrome.storage.sync.set({ settings: { ...settings, autoLockPinned: !!request.on } });
+      return { ok: true };
     }
     case "ui:saveSnapshot":
       return saveSnapshot(request.name, request.windowId);

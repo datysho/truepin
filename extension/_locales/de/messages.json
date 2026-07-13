@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Einstellungen"
+  },
+  "popupAutoLockLabel": {
+    "message": "Angepinnte Tabs schützen"
+  },
+  "optIconStyle": {
+    "message": "Symbolleisten-Icon"
+  },
+  "iconStyleColor": {
+    "message": "Farbig (Bernstein)"
+  },
+  "iconStyleMono": {
+    "message": "Wie die Browser-UI (grau)"
+  },
+  "optNotify": {
+    "message": "Benachrichtigen, wenn ein geschützter Tab zurückkommt"
+  },
+  "notifReopenedPinned": {
+    "message": "Angepinnte Tabs schließen nicht. Zum Schließen lösen."
+  },
+  "notifReopenedManual": {
+    "message": "Dieser Tab ist gesperrt. Zum Schließen im Popup entsperren."
   }
 }

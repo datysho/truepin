@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Ajustes"
+  },
+  "popupAutoLockLabel": {
+    "message": "Proteger las pestañas fijadas"
+  },
+  "optIconStyle": {
+    "message": "Icono de la barra"
+  },
+  "iconStyleColor": {
+    "message": "Color (ámbar)"
+  },
+  "iconStyleMono": {
+    "message": "Como la interfaz (gris)"
+  },
+  "optNotify": {
+    "message": "Notificar cuando vuelva una pestaña protegida"
+  },
+  "notifReopenedPinned": {
+    "message": "Las pestañas fijadas no se cierran. Desfíjala para cerrarla."
+  },
+  "notifReopenedManual": {
+    "message": "Esta pestaña está bloqueada. Desbloquéala en el popup para cerrarla."
   }
 }

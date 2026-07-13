@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Настройки"
+  },
+  "popupAutoLockLabel": {
+    "message": "Защищать закреплённые вкладки"
+  },
+  "optIconStyle": {
+    "message": "Иконка на панели"
+  },
+  "iconStyleColor": {
+    "message": "Цветная (янтарная)"
+  },
+  "iconStyleMono": {
+    "message": "Под интерфейс браузера (серая)"
+  },
+  "optNotify": {
+    "message": "Уведомлять о возврате защищённой вкладки"
+  },
+  "notifReopenedPinned": {
+    "message": "Закреплённые не закрываются. Чтобы закрыть - сними закрепление."
+  },
+  "notifReopenedManual": {
+    "message": "Вкладка под замком. Чтобы закрыть - выключи замок в попапе."
   }
 }

@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Settings"
+  },
+  "popupAutoLockLabel": {
+    "message": "Protect pinned tabs"
+  },
+  "optIconStyle": {
+    "message": "Toolbar icon"
+  },
+  "iconStyleColor": {
+    "message": "Color (amber)"
+  },
+  "iconStyleMono": {
+    "message": "Match browser UI (gray)"
+  },
+  "optNotify": {
+    "message": "Notify when a protected tab is brought back"
+  },
+  "notifReopenedPinned": {
+    "message": "Pinned tabs don't close. Unpin to close."
+  },
+  "notifReopenedManual": {
+    "message": "This tab is locked. Unlock it in the popup to close."
   }
 }

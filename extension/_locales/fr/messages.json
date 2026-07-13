@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Paramètres"
+  },
+  "popupAutoLockLabel": {
+    "message": "Protéger les onglets épinglés"
+  },
+  "optIconStyle": {
+    "message": "Icône de la barre d'outils"
+  },
+  "iconStyleColor": {
+    "message": "Couleur (ambre)"
+  },
+  "iconStyleMono": {
+    "message": "Assortie au navigateur (grise)"
+  },
+  "optNotify": {
+    "message": "Notifier quand un onglet protégé revient"
+  },
+  "notifReopenedPinned": {
+    "message": "Les onglets épinglés ne se ferment pas. Désépinglez pour fermer."
+  },
+  "notifReopenedManual": {
+    "message": "Cet onglet est verrouillé. Déverrouillez-le dans la fenêtre pour fermer."
   }
 }

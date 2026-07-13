@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "设置"
+  },
+  "popupAutoLockLabel": {
+    "message": "保护固定标签页"
+  },
+  "optIconStyle": {
+    "message": "工具栏图标"
+  },
+  "iconStyleColor": {
+    "message": "彩色（琥珀色）"
+  },
+  "iconStyleMono": {
+    "message": "跟随浏览器界面（灰色）"
+  },
+  "optNotify": {
+    "message": "受保护标签页恢复时发出通知"
+  },
+  "notifReopenedPinned": {
+    "message": "固定标签页不会被关闭。要关闭请先取消固定。"
+  },
+  "notifReopenedManual": {
+    "message": "此标签页已锁定。要关闭请在弹窗中解锁。"
   }
 }

@@ -89,18 +89,14 @@ function snapRow({ label, meta, onRestore, onDelete, tooltip }) {
 }
 
 function render() {
-  // Lock switch for the active tab.
+  // The switch: on a pinned tab it drives the GLOBAL auto-protection of
+  // pinned tabs; on a regular tab it is that tab's own manual lock.
   const active = state.active;
-  $("lockToggle").checked = !!(active && active.protected);
-  $("lockHint").textContent = !active
-    ? ""
-    : active.protected
-      ? active.pinned
-        ? t("hintProtectedPinned")
-        : t("hintProtectedManual")
-      : active.pinned
-        ? t("hintAutoOff")
-        : t("hintPlain");
+  const pinnedMode = !!(active && active.pinned);
+  $("lockLabel").textContent = t(pinnedMode ? "popupAutoLockLabel" : "popupLockLabel");
+  $("lockToggle").checked = pinnedMode
+    ? !!state.settings.autoLockPinned
+    : !!(active && active.protected);
 
   // Current pinned tabs.
   const list = $("pinnedList");
@@ -217,8 +213,10 @@ async function init() {
   activeTabId = tab ? tab.id : undefined;
 
   $("lockToggle").addEventListener("change", async () => {
-    if (activeTabId === undefined) return;
-    const result = await send({ type: "ui:toggle", tabId: activeTabId });
+    if (!state || !state.active) return;
+    const result = state.active.pinned
+      ? await send({ type: "ui:setAutoLock", on: $("lockToggle").checked })
+      : await send({ type: "ui:toggle", tabId: activeTabId });
     if (result && result.error) setStatus(t(result.error), true);
     refresh();
   });

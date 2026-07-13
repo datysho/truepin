@@ -148,5 +148,26 @@
   },
   "optionsLink": {
     "message": "Налаштування"
+  },
+  "popupAutoLockLabel": {
+    "message": "Захищати закріплені вкладки"
+  },
+  "optIconStyle": {
+    "message": "Іконка на панелі"
+  },
+  "iconStyleColor": {
+    "message": "Кольорова (бурштинова)"
+  },
+  "iconStyleMono": {
+    "message": "Під інтерфейс браузера (сіра)"
+  },
+  "optNotify": {
+    "message": "Сповіщати про повернення захищеної вкладки"
+  },
+  "notifReopenedPinned": {
+    "message": "Закріплені не закриваються. Щоб закрити - відкріпи."
+  },
+  "notifReopenedManual": {
+    "message": "Вкладка під замком. Щоб закрити - вимкни замок у попапі."
   }
 }

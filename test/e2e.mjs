@@ -67,14 +67,29 @@ async function waitFor(label, probe, timeoutMs = 8000, intervalMs = 150) {
 }
 
 let cachedWorker = null;
+let currentSwTarget = null;
+
+async function findSwTarget(excludeTarget) {
+  const target = await browser.waitForTarget(
+    (t) =>
+      t.type() === "service_worker" &&
+      t.url().endsWith("background.js") &&
+      (!excludeTarget || t !== excludeTarget),
+    { timeout: 20_000 },
+  );
+  currentSwTarget = target;
+  return target;
+}
 
 async function getWorker() {
   if (cachedWorker) return cachedWorker;
-  const target = await browser.waitForTarget(
-    (t) => t.type() === "service_worker" && t.url().endsWith("background.js"),
-    { timeout: 10_000 },
-  );
-  cachedWorker = await target.worker();
+  const target = await findSwTarget(null);
+  cachedWorker = await Promise.race([
+    target.worker(),
+    sleep(5000).then(() => {
+      throw new Error("worker attach timed out");
+    }),
+  ]);
   return cachedWorker;
 }
 
@@ -200,11 +215,8 @@ async function main() {
   // Collect service worker errors for the whole run (regression guard for
   // "Unchecked runtime.lastError" on calls that race a closing tab).
   const swErrors = [];
-  {
-    const swTarget = await browser.waitForTarget(
-      (t) => t.type() === "service_worker" && t.url().endsWith("background.js"),
-      { timeout: 10_000 },
-    );
+  async function attachSwErrorCollector(targetOverride) {
+    const swTarget = targetOverride || (await findSwTarget(null));
     const session = await swTarget.createCDPSession();
     await session.send("Runtime.enable");
     await session.send("Log.enable");
@@ -220,6 +232,7 @@ async function main() {
       swErrors.push(`exception: ${text.split("\n")[0]}`);
     });
   }
+  await attachSwErrorCollector();
 
   await test("extension boots: service worker up, defaults in effect", async () => {
     step("read settings");
@@ -245,6 +258,10 @@ async function main() {
       "reopened tab re-protected",
       async () => (await tabState(after.id))?.protected === true,
     );
+    await waitFor("laconic notification shown", async () => {
+      const notes = await swEval(() => new Promise((r) => chrome.notifications.getAll(r)));
+      return notes && notes["truepin-reopen"];
+    });
   });
 
   await test("protection: user-style close (runBeforeUnload) - no dialog, still comes back", async () => {
@@ -541,6 +558,22 @@ async function main() {
     assert(ring.length <= 10, "ring capped at 10");
   });
 
+  await test("popup backend: pinned-tab toggle drives global auto-protection", async () => {
+    step("turn auto-protection off via ui:setAutoLock");
+    const off = await uiCall({ type: "ui:setAutoLock", on: false });
+    assert(off.ok, "off ok");
+    await waitFor("setting off", async () => {
+      const s = await swEval(async () => (await chrome.storage.sync.get("settings")).settings);
+      return s && s.autoLockPinned === false;
+    });
+    step("turn it back on");
+    await uiCall({ type: "ui:setAutoLock", on: true });
+    await waitFor("pins protected again", async () => {
+      const pins = await pinnedOf(snapWindowId);
+      return pins.length > 0 && (await tabState(pins[0].id))?.protected === true;
+    });
+  });
+
   await test("popup: renders pinned set, snapshots and autosaves; saves via UI", async () => {
     step("open popup page");
     const swTarget = await browser.waitForTarget(
@@ -764,6 +797,38 @@ async function main() {
       counts.every((n) => n === counts[0]),
       "closing a whole window resurrected nothing",
     );
+  });
+
+  await test("extension reload (simulated): bootstrap over wiped state does not duplicate", async () => {
+    // A chrome://extensions Reload restarts the SW with storage.session
+    // wiped and fires the install bootstrap. runtime.reload() kills a
+    // --load-extension extension in this harness entirely, so the state
+    // transition is simulated via a test hook - the duplication mechanics
+    // (blind copy creation over multiple windows) are identical.
+    const winIds = [snapWindowId, mirrorWinId, urlWinId];
+    const before = [];
+    for (const wid of winIds) before.push((await pinnedOf(wid)).length);
+    assert(before.every((n) => n === before[0] && n > 0), `mirrored before (${before})`);
+    step("wipe session state and re-run the install bootstrap");
+    await swEval(() => globalThis.__tpSimulateReload());
+    await sleep(4000); // bootstrap + strip-stability wait
+    step("counts unchanged after bootstrap");
+    for (let i = 0; i < winIds.length; i++) {
+      const pins = await pinnedOf(winIds[i]);
+      assert(
+        pins.length === before[i],
+        `window ${i}: expected ${before[i]}, got ${pins.length}`,
+      );
+    }
+    step("counts stay stable (no delayed creations)");
+    await sleep(3000);
+    for (let i = 0; i < winIds.length; i++) {
+      const pins = await pinnedOf(winIds[i]);
+      assert(
+        pins.length === before[i],
+        `window ${i} stable: expected ${before[i]}, got ${pins.length}`,
+      );
+    }
   });
 
   await test("mirrorPinned=false: new window stays empty, groups cleared", async () => {

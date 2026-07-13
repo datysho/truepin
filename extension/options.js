@@ -4,6 +4,8 @@ const DEFAULTS = {
   showIcon: true,
   mirrorPinned: true,
   autoSnapshot: true,
+  notifyReopen: true,
+  iconStyle: "color",
   language: "auto",
 };
 const FIELDS = Object.keys(DEFAULTS);
