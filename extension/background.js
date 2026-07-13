@@ -141,24 +141,39 @@ function computeProtected(state, settings) {
   return settings.autoLockPinned && state.pinned;
 }
 
+// Fire-and-forget calls often target a tab that is mid-close. With the
+// promise form Chromium still logs "Unchecked runtime.lastError" for these
+// per-tab errors even when the rejection is caught - the callback form with
+// an explicit lastError read is the only quiet way.
+const checked = () => void chrome.runtime.lastError;
+
+// Promisified callback-form call: resolves with the result (undefined on
+// error) and always reads lastError, so nothing is logged for dead tabs.
+const quiet = (api, ...args) =>
+  new Promise((resolve) =>
+    api(...args, (result) => {
+      void chrome.runtime.lastError;
+      resolve(result);
+    }),
+  );
+
 function applyToTab(tabId, state, settings) {
-  chrome.tabs
-    .sendMessage(
-      tabId,
-      { type: "apply", locked: state.protected, showIcon: settings.showIcon },
-      { frameId: 0 },
-    )
-    .catch(() => {});
+  chrome.tabs.sendMessage(
+    tabId,
+    { type: "apply", locked: state.protected, showIcon: settings.showIcon },
+    { frameId: 0 },
+    checked,
+  );
   // Keep protected pages alive: a page discarded by the memory saver loses
   // its beforeunload handler and would close silently.
-  chrome.tabs.update(tabId, { autoDiscardable: !state.protected }).catch(() => {});
+  chrome.tabs.update(tabId, { autoDiscardable: !state.protected }, checked);
   updateAction(tabId, state.protected);
 }
 
 function updateAction(tabId, isProtected) {
   const variant = isProtected ? "locked" : "unlocked";
-  chrome.action
-    .setIcon({
+  chrome.action.setIcon(
+    {
       tabId,
       path: {
         16: `icons/${variant}-16.png`,
@@ -166,15 +181,17 @@ function updateAction(tabId, isProtected) {
         48: `icons/${variant}-48.png`,
         128: `icons/${variant}-128.png`,
       },
-    })
-    .catch(() => {});
+    },
+    checked,
+  );
   ensureI18n().then(() => {
-    chrome.action
-      .setTitle({
+    chrome.action.setTitle(
+      {
         tabId,
         title: tpI18n.t(isProtected ? "actionProtected" : "actionUnprotected"),
-      })
-      .catch(() => {});
+      },
+      checked,
+    );
   });
 }
 
@@ -231,17 +248,17 @@ async function normalWindows() {
 async function createCopy(mirror, gid, windowId, index) {
   const group = mirror.groups[gid];
   mirror.pending.push({ windowId, gid, url: group.url });
-  try {
-    const tab = await chrome.tabs.create({
-      windowId,
-      url: group.url,
-      pinned: true,
-      index,
-      active: false,
-    });
+  const tab = await quiet(chrome.tabs.create, {
+    windowId,
+    url: group.url,
+    pinned: true,
+    index,
+    active: false,
+  });
+  if (tab) {
     group.members[windowId] = tab.id;
-  } catch (err) {
-    traceDiag(`createCopy failed win=${windowId} gid=${gid}: ${err && err.message}`);
+  } else {
+    traceDiag(`createCopy failed win=${windowId} gid=${gid}`);
     mirror.pending = mirror.pending.filter((p) => !(p.windowId === windowId && p.gid === gid));
   }
 }
@@ -304,7 +321,7 @@ async function dissolveGroup(mirror, gid, keepTabId) {
   mirror.order = mirror.order.filter((g) => g !== gid);
   if (victims.length) {
     await markSelfClosed(victims);
-    await chrome.tabs.remove(victims).catch(() => {});
+    await quiet(chrome.tabs.remove, victims);
   }
   traceDiag(`group ${gid} dissolved, closed ${victims.length} sibling(s)`);
 }
@@ -421,7 +438,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       state.protected = computeProtected(state, settings);
       await putTabState(tab.id, state);
       if (request.top) {
-        chrome.tabs.update(tab.id, { autoDiscardable: !state.protected }).catch(() => {});
+        chrome.tabs.update(tab.id, { autoDiscardable: !state.protected }, checked);
         updateAction(tab.id, state.protected);
       }
       sendResponse({ locked: state.protected, showIcon: settings.showIcon });
@@ -518,7 +535,7 @@ function scheduleUnpinConfirm(tabId) {
     enqueue(async () => {
       const settings = await getSettings();
       if (!settings.mirrorPinned) return;
-      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      const tab = await quiet(chrome.tabs.get, tabId);
       if (!tab || tab.pinned) return; // closed (handled by onRemoved) or re-pinned
       const mirror = await getMirror();
       const gid = groupOfTab(mirror, tabId);
@@ -854,15 +871,21 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
       used.add(match.id);
       reused++;
       if (match.index !== i) {
-        await chrome.tabs.move(match.id, { index: i }).catch(() => {});
+        await quiet(chrome.tabs.move, match.id, { index: i });
       }
     } else {
-      try {
-        const tab = await chrome.tabs.create({ windowId, url, pinned: true, index: i, active: false });
+      const tab = await quiet(chrome.tabs.create, {
+        windowId,
+        url,
+        pinned: true,
+        index: i,
+        active: false,
+      });
+      if (tab) {
         used.add(tab.id);
         created++;
-      } catch (err) {
-        traceDiag(`diffApply: create failed for ${url}: ${err && err.message}`);
+      } else {
+        traceDiag(`diffApply: create failed for ${url}`);
       }
     }
   }
@@ -871,7 +894,7 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
     const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
     if (extras.length) {
       await markSelfClosed(extras);
-      await chrome.tabs.remove(extras).catch(() => {});
+      await quiet(chrome.tabs.remove, extras);
       closed = extras.length;
     }
   }
@@ -910,7 +933,8 @@ async function toggleTab(tab) {
 
 // Exposed for the e2e suite (reachable from extension contexts only).
 globalThis.truePinToggle = async (tabId) => {
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await quiet(chrome.tabs.get, tabId);
+  if (!tab) return null;
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
@@ -923,7 +947,7 @@ async function handleUi(request) {
       const pinned = await pinnedTabsOf(request.windowId);
       let active = null;
       if (request.tabId !== undefined) {
-        const tab = await chrome.tabs.get(request.tabId).catch(() => null);
+        const tab = await quiet(chrome.tabs.get, request.tabId);
         if (tab) {
           const state = (await getTabState(tab.id)) || newTabState(tab);
           active = {
@@ -948,7 +972,7 @@ async function handleUi(request) {
       };
     }
     case "ui:toggle": {
-      const tab = await chrome.tabs.get(request.tabId).catch(() => null);
+      const tab = await quiet(chrome.tabs.get, request.tabId);
       if (!tab) return { error: "hintPlain" };
       const state = await toggleTab(tab);
       return { ok: true, protected: state.protected };

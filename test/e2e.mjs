@@ -174,6 +174,30 @@ async function main() {
     ],
   });
 
+  // Collect service worker errors for the whole run (regression guard for
+  // "Unchecked runtime.lastError" on calls that race a closing tab).
+  const swErrors = [];
+  {
+    const swTarget = await browser.waitForTarget(
+      (t) => t.type() === "service_worker" && t.url().endsWith("background.js"),
+      { timeout: 10_000 },
+    );
+    const session = await swTarget.createCDPSession();
+    await session.send("Runtime.enable");
+    await session.send("Log.enable");
+    session.on("Log.entryAdded", (event) => {
+      const text = event.entry?.text || "";
+      if (/Unchecked runtime\.lastError|Uncaught \(in promise\)/.test(text)) {
+        swErrors.push(text);
+      }
+    });
+    session.on("Runtime.exceptionThrown", (event) => {
+      const text =
+        event.exceptionDetails?.exception?.description || event.exceptionDetails?.text || "";
+      swErrors.push(`exception: ${text.split("\n")[0]}`);
+    });
+  }
+
   await test("extension boots: service worker up, defaults in effect", async () => {
     step("read settings");
     const settings = await swEval(async () => {
@@ -681,6 +705,15 @@ async function main() {
       return messages.saveBtn.message;
     });
     assert(zh === "保存", `chinese message (got "${zh}")`);
+  });
+
+  await test("service worker: no unchecked runtime errors during the run", async () => {
+    step("settle");
+    await sleep(600);
+    assert(
+      swErrors.length === 0,
+      `${swErrors.length} SW error(s): ${swErrors.slice(0, 3).join(" | ")}`,
+    );
   });
 
   step("browser close");
