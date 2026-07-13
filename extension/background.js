@@ -124,13 +124,18 @@ function originKey(url) {
 // tab navigates to a real page it becomes a first-class pin.
 function isEphemeralUrl(url) {
   if (!url) return true;
+  if (/^about:(blank|newtab)$/i.test(url)) return true;
+  // The new-tab page across Chromium browsers (Chrome, Edge, Opera, Vivaldi,
+  // Brave): the scheme and host vary, the meaning does not.
   if (
-    /^(about:blank|chrome:\/\/(newtab|new-tab-page|new-tab-page-third-party)\/?([?#].*)?)$/i.test(
+    /^(chrome|edge|opera|vivaldi|brave):\/\/(newtab|new-tab-page|new-tab-page-third-party|startpage)\/?([?#].*)?$/i.test(
       url,
     )
   ) {
     return true;
   }
+  if (/^https:\/\/ntp\.msn\.com\//i.test(url)) return true; // Edge's NTP
+  if (/^chrome:\/\/vivaldi-webui\/startpage/i.test(url)) return true; // Vivaldi's NTP
   // The split-view picker ("Choose a tab to add to split view") is a pinned
   // tab at kChromeUISplitViewNewTabPageURL - a page under the
   // tab-search.top-chrome host, which is browser UI, never user content.

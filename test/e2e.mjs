@@ -903,7 +903,17 @@ async function main() {
         isEphemeralUrl(u),
         isEphemeralUrl("chrome://new-tab-page-third-party/"),
         isEphemeralUrl(""),
+        // Other Chromium browsers' new-tab pages.
+        isEphemeralUrl("edge://newtab/"),
+        isEphemeralUrl("https://ntp.msn.com/edge/ntp?locale=en-US"),
+        isEphemeralUrl("opera://startpage/"),
+        isEphemeralUrl("vivaldi://newtab"),
+        isEphemeralUrl("chrome://vivaldi-webui/startpage?section=Speed-dials"),
+        isEphemeralUrl("brave://newtab/"),
+        isEphemeralUrl("about:newtab"),
+        // Real content must never be ephemeral.
         !isEphemeralUrl("https://example.com/"),
+        !isEphemeralUrl("https://ntp.msn.com.evil.example/"),
       ],
       PICKER,
     );
