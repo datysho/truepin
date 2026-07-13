@@ -33,7 +33,12 @@ Pinned tabs form logical groups, and every group is present in every normal wind
 ## Split View
 - Tabs in Chrome's split view are ordinary tabs to the protection: closing a protected split member brings it right back.
 - The tabs Chrome itself creates for the split gesture are ephemeral and invisible to the extension: the "Choose a tab to add to split view" picker (a real pinned tab at `chrome://tab-search.top-chrome/split_new_tab_page.html` - `kChromeUISplitViewNewTabPageURL` - that Chrome closes by itself once a tab is picked) and the blank new-tab partner. Neither is protected, mirrored or saved into sets, so building or dismissing a split never leaves phantom empty pins behind and nothing resurrects the picker after the choice. As soon as such a tab navigates to a real page, it becomes a first-class pin: protected, mirrored, snapshotted. Snapshots written by older versions that caught the picker are cleaned on read.
-- Chrome exposes split view to extensions read-only (`tab.splitViewId` as of Chrome 148; there is no API to create or modify splits). The honest consequences: a reopened tab returns pinned but outside its former split, mirror copies in other windows are not split, and restoring a set cannot re-create splits. Sets already STORE the split pairs (`splits`), so restore will pick them up the moment Chrome ships a write API.
+- Chrome exposes split view to extensions read-only: `tab.splitViewId` can be read and queried, but no API creates or modifies a split - not in Chrome 148 and not yet in the current Chromium source (`tabs.update` does not accept `splitViewId`; there is no splitView namespace). The honest consequences: a reopened tab returns pinned but outside its former split, mirror copies in other windows are not split, and restoring a set cannot re-create splits.
+- Within that limit TruePin preserves everything it can:
+  - Sets and autosaves record the split pairs (`splits`); the popup marks tabs that sit in a split and sets that carry pairs with ⧉.
+  - Restoring a set never tears a live split apart: a matched tab that sits in a split is reused in place and not moved (the split wins over exact ordering).
+  - Mirror copies of a split pair land adjacent in the pin strip of every window, so re-splitting them is one gesture.
+  - The moment Chrome ships a write API, the stored pairs become real splits on restore.
 
 ## Closing a protected tab
 - Pinned: unpin it, then close.

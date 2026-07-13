@@ -54,6 +54,18 @@ await worker.evaluate(async (b) => {
 await sleep(2500); // let auto-snapshot land
 const winId = await worker.evaluate(async () => (await chrome.windows.getAll())[0].id);
 await worker.evaluate((w) => globalThis.__tpUiCall({ type: "ui:saveSnapshot", windowId: w, name: "Работа" }), winId);
+// A set carrying a split-view pair (the ⧉ mark in the meta line).
+await worker.evaluate(async (b) => {
+  await chrome.storage.sync.set({
+    "snap:Аналитика": {
+      urls: [`${b}/one`, `${b}/two`],
+      titles: ["Gmail", "Календарь"],
+      keys: [`${b}/one`, `${b}/two`],
+      splits: [[0, 1]],
+      savedAt: Date.now() - 3 * 3600e3,
+    },
+  });
+}, base);
 await sleep(300);
 
 const extId = new URL(target.url()).host;

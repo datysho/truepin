@@ -952,11 +952,15 @@ async function listSnapshots() {
   const all = await chrome.storage.sync.get(null);
   return Object.entries(all)
     .filter(([key]) => key.startsWith(SNAP_PREFIX))
-    .map(([key, value]) => ({
-      name: key.slice(SNAP_PREFIX.length),
-      count: sanitizeSnap(value).urls.length,
-      savedAt: value.savedAt || 0,
-    }))
+    .map(([key, value]) => {
+      const clean = sanitizeSnap(value);
+      return {
+        name: key.slice(SNAP_PREFIX.length),
+        count: clean.urls.length,
+        splits: (clean.splits || []).length,
+        savedAt: value.savedAt || 0,
+      };
+    })
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
@@ -1032,7 +1036,13 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
     if (match) {
       used.add(match.id);
       reused++;
-      if (match.index !== i) {
+      // A tab sitting in a live split view is never moved: Chrome gives
+      // extensions no way to re-create a split (splitViewId is read-only),
+      // so a matched tab keeps its split at the cost of exact ordering.
+      const inSplit =
+        match.splitViewId !== undefined &&
+        match.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE;
+      if (!inSplit && match.index !== i) {
         await quiet(chrome.tabs.move, match.id, { index: i });
       }
     } else {
@@ -1131,12 +1141,21 @@ async function handleUi(request) {
       }
       const ring = await getAutoSnaps();
       return {
-        pinned: pinned.map((t) => ({ id: t.id, title: t.title || tabUrl(t), url: tabUrl(t) })),
+        pinned: pinned.map((t) => ({
+          id: t.id,
+          title: t.title || tabUrl(t),
+          url: tabUrl(t),
+          split:
+            t.splitViewId !== undefined && t.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE
+              ? t.splitViewId
+              : -1,
+        })),
         active,
         snapshots: await listSnapshots(),
         autoSnaps: ring.map((snap, index) => ({
           index,
           count: (snap.urls || []).length,
+          splits: (snap.splits || []).length,
           savedAt: snap.savedAt || 0,
         })),
         settings,

@@ -627,6 +627,29 @@ async function main() {
       }),
     );
     assert(metaOk, "meta visible and inside the row for every set");
+
+    step("a set carrying split-view pairs shows the split mark");
+    await swEval(async (base) => {
+      await chrome.storage.sync.set({
+        "snap:with-split": {
+          urls: [`${base}/s1b`, `${base}/s2`],
+          titles: ["a", "b"],
+          keys: [`${base}/s1b`, `${base}/s2`],
+          splits: [[0, 1]],
+          savedAt: Date.now(),
+        },
+      });
+    }, baseUrl);
+    await page.reload({ timeout: 10_000 });
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("#snapList .snap .meta")].some((m) =>
+          m.textContent.includes("⧉"),
+        ),
+      { timeout: 8000 },
+    );
+    await uiCall({ type: "ui:deleteSnapshot", name: "with-split" });
+
     await uiCall({ type: "ui:deleteSnapshot", name: "a-very-long-snapshot-name-that-keeps-go" });
     await uiCall({ type: "ui:deleteSnapshot", name: "second" });
     step("close popup page");

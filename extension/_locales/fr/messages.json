@@ -169,5 +169,9 @@
   },
   "notifReopenedManual": {
     "message": "Cet onglet est verrouillé. Déverrouillez-le dans la fenêtre pour fermer."
+  },
+  "splitTitle": {
+    "message": "Écran partagé",
+    "description": "Tooltip: tab is in a split view / set contains split pairs"
   }
 }

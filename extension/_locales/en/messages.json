@@ -169,5 +169,9 @@
   },
   "notifReopenedManual": {
     "message": "This tab is locked. Unlock it in the popup to close."
+  },
+  "splitTitle": {
+    "message": "Split view",
+    "description": "Tooltip: tab is in a split view / set contains split pairs"
   }
 }

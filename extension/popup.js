@@ -49,7 +49,7 @@ async function refresh() {
   render();
 }
 
-function snapRow({ label, meta, onRestore, onDelete, tooltip }) {
+function snapRow({ label, meta, metaTitle, onRestore, onDelete, tooltip }) {
   const row = document.createElement("div");
   row.className = "snap";
   const info = document.createElement("span");
@@ -61,6 +61,7 @@ function snapRow({ label, meta, onRestore, onDelete, tooltip }) {
   const metaEl = document.createElement("span");
   metaEl.className = "meta muted";
   metaEl.textContent = meta;
+  if (metaTitle) metaEl.title = metaTitle;
   info.append(nameEl, metaEl);
   const restoreBtn = document.createElement("button");
   restoreBtn.textContent = t("restoreBtn");
@@ -117,6 +118,13 @@ function render() {
     span.textContent = tab.title;
     span.title = tab.url;
     li.append(img, span);
+    if (tab.split !== undefined && tab.split !== -1) {
+      const mark = document.createElement("span");
+      mark.className = "splitmark";
+      mark.textContent = "⧉";
+      mark.title = t("splitTitle");
+      li.append(mark);
+    }
     list.append(li);
   }
   $("saveBtn").disabled = !state.pinned.length;
@@ -132,10 +140,12 @@ function render() {
     snapList.append(div);
   }
   for (const snap of state.snapshots) {
+    const splitMark = snap.splits ? ` · ⧉${snap.splits > 1 ? snap.splits : ""}` : "";
     snapList.append(
       snapRow({
         label: snap.name,
-        meta: `${tpI18n.tabsCount(snap.count)} · ${relTime(snap.savedAt)}`,
+        meta: `${tpI18n.tabsCount(snap.count)} · ${relTime(snap.savedAt)}${splitMark}`,
+        metaTitle: snap.splits ? t("splitTitle") : undefined,
         onRestore: () => restoreSnap({ name: snap.name }),
         onDelete: async () => {
           await send({ type: "ui:deleteSnapshot", name: snap.name });
@@ -157,10 +167,12 @@ function render() {
     autoList.append(div);
   }
   for (const snap of state.autoSnaps) {
+    const splitMark = snap.splits ? ` · ⧉${snap.splits > 1 ? snap.splits : ""}` : "";
     autoList.append(
       snapRow({
         label: relTime(snap.savedAt),
-        meta: tpI18n.tabsCount(snap.count),
+        meta: `${tpI18n.tabsCount(snap.count)}${splitMark}`,
+        metaTitle: snap.splits ? t("splitTitle") : undefined,
         onRestore: () => restoreSnap({ autoIndex: snap.index }),
       }),
     );
