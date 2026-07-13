@@ -116,14 +116,25 @@ function originKey(url) {
   }
 }
 
-// Ephemeral pages are not content: the empty new-tab page and blank tabs.
-// Chrome creates exactly such a pinned tab as a split-view partner - it must
-// not be protected, mirrored or snapshotted, or it turns into phantom empty
-// pins (resurrected on split teardown, copied into other windows). Once it
-// navigates to a real page it becomes a first-class pin.
+// Ephemeral pages are not content: blank tabs, the empty new-tab page and
+// Chrome's split-view tab picker. Chrome creates exactly such pinned tabs as
+// split-view partners - they must not be protected, mirrored or snapshotted,
+// or they turn into phantom empty pins (resurrected after Chrome closes the
+// picker itself, copied into other windows, saved into sets). Once such a
+// tab navigates to a real page it becomes a first-class pin.
 function isEphemeralUrl(url) {
   if (!url) return true;
-  return /^(about:blank|chrome:\/\/newtab\/?|chrome:\/\/new-tab-page\/?)$/i.test(url);
+  if (
+    /^(about:blank|chrome:\/\/(newtab|new-tab-page|new-tab-page-third-party)\/?([?#].*)?)$/i.test(
+      url,
+    )
+  ) {
+    return true;
+  }
+  // The split-view picker ("Choose a tab to add to split view") is a pinned
+  // tab at kChromeUISplitViewNewTabPageURL - a page under the
+  // tab-search.top-chrome host, which is browser UI, never user content.
+  return /^chrome:\/\/tab-search\.top-chrome\//i.test(url);
 }
 
 async function getTabState(tabId) {
@@ -387,6 +398,7 @@ async function syncWindowFill(windowId, settings) {
   let changed = false;
   for (let i = 0; i < mirror.order.length; i++) {
     const gid = mirror.order[i];
+    if (isEphemeralUrl(mirror.groups[gid].url)) continue; // never fill these
     if (mirror.groups[gid].members[windowId] === undefined) {
       await createCopy(mirror, gid, windowId, i);
       changed = true;
@@ -399,6 +411,17 @@ async function rebuildMirror(settings) {
   if (!settings.mirrorPinned) {
     await chrome.storage.session.set({ groups: {}, groupOrder: [], pendingCreates: [] });
     return;
+  }
+  // Unregister groups recorded with an ephemeral url (an older version could
+  // register the split-view picker); their tabs are left alone.
+  const mirror = await getMirror();
+  const bad = mirror.order.filter(
+    (gid) => !mirror.groups[gid] || isEphemeralUrl(mirror.groups[gid].url),
+  );
+  if (bad.length) {
+    for (const gid of bad) delete mirror.groups[gid];
+    mirror.order = mirror.order.filter((gid) => !bad.includes(gid));
+    await putMirror(mirror);
   }
   // At browser startup the session-restored windows are still growing their
   // tab strips; adopting a half-restored window would duplicate the rest.
@@ -567,11 +590,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       const mirror = await getMirror();
       const gid = groupOfTab(mirror, tabId);
       if (gid) {
-        const oldKey = pathKey(mirror.groups[gid].url);
-        mirror.groups[gid].url = changeInfo.url;
-        await putMirror(mirror);
-        // Autosave only on a real page change, not query-string noise.
-        if (oldKey !== pathKey(changeInfo.url)) scheduleAutoSnapshot();
+        // A group never takes an ephemeral url as its identity: a member
+        // passing through the new-tab page keeps representing its old page.
+        if (!isEphemeralUrl(changeInfo.url)) {
+          const oldKey = pathKey(mirror.groups[gid].url);
+          mirror.groups[gid].url = changeInfo.url;
+          await putMirror(mirror);
+          // Autosave only on a real page change, not query-string noise.
+          if (oldKey !== pathKey(changeInfo.url)) scheduleAutoSnapshot();
+        }
       } else if (!isEphemeralUrl(changeInfo.url)) {
         // A pinned tab that was ephemeral (split-view partner on the empty
         // new-tab page) just navigated somewhere real: it becomes a
@@ -693,6 +720,10 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
 
 async function reopenTab(state, windowId, settings) {
   const url = state.url || "";
+  // Never resurrect an ephemeral page: Chrome closes the split-view picker
+  // by itself, and state recorded by an older version may still claim such
+  // a tab was protected. A manual lock is an explicit user decision.
+  if (state.manual !== true && isEphemeralUrl(url)) return;
   let newTab = null;
   // chrome.sessions preserves history, scroll and form state - try it first.
   for (let attempt = 0; attempt < 8 && !newTab; attempt++) {
@@ -844,6 +875,30 @@ function snapshotFromTabs(allTabs) {
   };
 }
 
+// Strip ephemeral urls out of a stored snapshot (entries written by an older
+// version can contain the split-view picker); split index pairs are remapped
+// to the surviving positions.
+function sanitizeSnap(snap) {
+  const urls = snap.urls || [];
+  const keep = urls.map((url) => !isEphemeralUrl(url));
+  if (keep.every(Boolean)) return snap;
+  const remap = new Map();
+  let next = 0;
+  keep.forEach((kept, index) => {
+    if (kept) remap.set(index, next++);
+  });
+  const pick = (list) => (list || []).filter((_, index) => keep[index]);
+  return {
+    ...snap,
+    urls: pick(urls),
+    titles: pick(snap.titles),
+    keys: pick(snap.keys),
+    splits: (snap.splits || [])
+      .filter(([a, b]) => remap.has(a) && remap.has(b))
+      .map(([a, b]) => [remap.get(a), remap.get(b)]),
+  };
+}
+
 const pinnedTabsOf = (windowId) => chrome.tabs.query({ windowId, pinned: true });
 
 // The window whose pinned set represents "the" set: most recently focused
@@ -865,7 +920,7 @@ async function pinnedHomeWindow() {
 
 async function getAutoSnaps() {
   const { [AUTO_SNAPS_KEY]: ring = [] } = await chrome.storage.local.get(AUTO_SNAPS_KEY);
-  return ring;
+  return ring.map(sanitizeSnap);
 }
 
 // Ring of the last N pinned sets. A new entry appears only when the set
@@ -899,7 +954,7 @@ async function listSnapshots() {
     .filter(([key]) => key.startsWith(SNAP_PREFIX))
     .map(([key, value]) => ({
       name: key.slice(SNAP_PREFIX.length),
-      count: (value.urls || []).length,
+      count: sanitizeSnap(value).urls.length,
       savedAt: value.savedAt || 0,
     }))
     .sort((a, b) => b.savedAt - a.savedAt);
@@ -1017,6 +1072,7 @@ async function restoreSnapshot(request, windowId, settings) {
       SNAP_PREFIX + request.name,
     ));
   }
+  if (snap) snap = sanitizeSnap(snap);
   if (!snap || !(snap.urls || []).length) return { error: "noSnaps" };
   const stats = await applyCanonicalSet(snap.urls, windowId, settings);
   traceDiag(`restoreSnapshot: ${JSON.stringify(stats)}`);

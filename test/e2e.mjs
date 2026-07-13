@@ -870,6 +870,120 @@ async function main() {
     assert(!(await findTab("/sp1")), "cleaned up");
   });
 
+  await test("split-view picker tab (tab-search.top-chrome): never registered, never resurrected", async () => {
+    // Chrome opens the "Choose a tab to add to split view" picker as a real
+    // pinned tab at kChromeUISplitViewNewTabPageURL and closes it by itself
+    // once a tab is picked. It must be invisible to the extension end to end.
+    const PICKER = "chrome://tab-search.top-chrome/split_new_tab_page.html";
+    const predicate = await swEval(
+      (u) => [
+        isEphemeralUrl(u),
+        isEphemeralUrl("chrome://new-tab-page-third-party/"),
+        isEphemeralUrl(""),
+        !isEphemeralUrl("https://example.com/"),
+      ],
+      PICKER,
+    );
+    assert(predicate.every(Boolean), `isEphemeralUrl coverage (${predicate})`);
+
+    const beforeCounts = {};
+    for (const wid of [mirrorWinId, urlWinId]) beforeCounts[wid] = (await pinnedOf(wid)).length;
+    step("create a pinned picker tab (what the split gesture makes)");
+    const picker = await swEval(
+      async (wid, url) => {
+        const tab = await chrome.tabs.create({ windowId: wid, url, pinned: true, active: false });
+        return tab.id;
+      },
+      snapWindowId,
+      PICKER,
+    );
+    await sleep(2200);
+
+    step("not registered: no mirror copies, no group, not protected");
+    for (const wid of [mirrorWinId, urlWinId]) {
+      assert(
+        (await pinnedOf(wid)).length === beforeCounts[wid],
+        `window ${wid} unchanged by the picker tab`,
+      );
+    }
+    const grouped = await swEval(async (id) => {
+      const { groups = {} } = await chrome.storage.session.get("groups");
+      return Object.values(groups).some((g) => Object.values(g.members).includes(id));
+    }, picker);
+    assert(!grouped, "picker tab is in no mirror group");
+    const st = await tabState(picker);
+    assert(!st || st.protected === false, `picker tab unprotected (${JSON.stringify(st)})`);
+
+    step("Chrome closes the picker itself: it must stay closed");
+    await removeTab(picker);
+    await sleep(1800);
+    const resurrected = await swEval(async () =>
+      (await chrome.tabs.query({ pinned: true })).some((t) =>
+        /tab-search\.top-chrome|newtab|new-tab-page/i.test(t.url || t.pendingUrl || ""),
+      ),
+    );
+    assert(!resurrected, "no pinned picker/newtab anywhere after the close");
+    const ring = await autoRing();
+    const poisonedRing = ring.some((s) =>
+      (s.urls || []).some((u) => /tab-search\.top-chrome|chrome:\/\/newtab/i.test(u)),
+    );
+    assert(!poisonedRing, "no autosave entry contains the picker url");
+
+    step("a poisoned autosave from an older version restores without the picker");
+    await swEval(
+      async (real, pickerUrl) => {
+        const { autoSnaps = [] } = await chrome.storage.local.get("autoSnaps");
+        autoSnaps.unshift({
+          urls: [pickerUrl, real],
+          titles: ["", "page"],
+          keys: [pickerUrl, real],
+          splits: [[0, 1]],
+          savedAt: Date.now(),
+        });
+        await chrome.storage.local.set({ autoSnaps });
+      },
+      `${baseUrl}/pk1`,
+      PICKER,
+    );
+    const res = await uiCall({ type: "ui:restoreSnapshot", windowId: snapWindowId, autoIndex: 0 });
+    assert(res && res.ok, `restore ok (${JSON.stringify(res)})`);
+    await waitFor(
+      "only the real page restored everywhere, picker skipped",
+      async () => {
+        for (const wid of [snapWindowId, mirrorWinId, urlWinId]) {
+          const pins = await pinnedOf(wid);
+          const ok =
+            pins.length === 1 &&
+            pins[0].url.includes("/pk1") &&
+            !pins.some((p) => /tab-search\.top-chrome/i.test(p.url));
+          if (!ok) return false;
+        }
+        return true;
+      },
+      10_000,
+      250,
+    );
+    // Settle: the restore closed tabs across three windows; their
+    // onUpdated/onRemoved events must be fully processed before the next
+    // test wipes storage.session, or the wipe erases the self-closed
+    // markers mid-flight and the still-queued events resurrect the tabs
+    // (a real extension reload kills the queue along with the worker, so
+    // this race exists only in the simulated one).
+    await waitFor(
+      "event queue drained",
+      async () => {
+        const d = await swEval(() => ({
+          queued: globalThis.__tpDiag.queued,
+          finished: globalThis.__tpDiag.finished,
+        }));
+        return d.queued === d.finished;
+      },
+      10_000,
+      200,
+    );
+    await sleep(2200);
+  });
+
   await test("extension reload (simulated): bootstrap over wiped state does not duplicate", async () => {
     // A chrome://extensions Reload restarts the SW with storage.session
     // wiped and fires the install bootstrap. runtime.reload() kills a
@@ -888,7 +1002,7 @@ async function main() {
       const pins = await pinnedOf(winIds[i]);
       assert(
         pins.length === before[i],
-        `window ${i}: expected ${before[i]}, got ${pins.length}`,
+        `window ${i}: expected ${before[i]}, got ${pins.length} [${pins.map((p) => p.url).join(", ")}]`,
       );
     }
     step("counts stay stable (no delayed creations)");
