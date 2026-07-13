@@ -15,6 +15,7 @@
   let locked = false;
   let showIcon = true;
   let orphaned = false; // a newer copy of this script took over
+  let closing = false; // the extension is about to close this tab itself
   let activationSent = false;
   let titleObserver = null;
   let titleDeferred = false;
@@ -45,7 +46,11 @@
     window.addEventListener(
       "beforeunload",
       (event) => {
-        if (!locked || orphaned) return;
+        // `closing` = the extension itself is removing this tab (mirror
+        // propagation, snapshot restore). Those closes must be silent -
+        // chrome.tabs.remove would otherwise trigger this dialog on any
+        // tab that has sticky user activation.
+        if (!locked || orphaned || closing) return;
         event.preventDefault();
         // Kept for older Chrome; modern Chrome only needs preventDefault().
         event.returnValue = "";
@@ -54,9 +59,16 @@
     );
 
     chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-      if (orphaned || !request || request.type !== "apply") return;
-      applyState(request);
-      sendResponse({ ok: true });
+      if (orphaned || !request) return;
+      if (request.type === "disarm") {
+        closing = true;
+        sendResponse({ ok: true });
+        return;
+      }
+      if (request.type === "apply") {
+        applyState(request);
+        sendResponse({ ok: true });
+      }
     });
   }
 

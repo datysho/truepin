@@ -319,10 +319,7 @@ async function dissolveGroup(mirror, gid, keepTabId) {
   );
   delete mirror.groups[gid];
   mirror.order = mirror.order.filter((g) => g !== gid);
-  if (victims.length) {
-    await markSelfClosed(victims);
-    await quiet(chrome.tabs.remove, victims);
-  }
+  await closeTabs(victims);
   traceDiag(`group ${gid} dissolved, closed ${victims.length} sibling(s)`);
 }
 
@@ -409,6 +406,24 @@ async function wasSelfClosed(tabId) {
   delete selfClosed[tabId];
   await chrome.storage.session.set({ selfClosed });
   return true;
+}
+
+// Close tabs the extension owns (mirror copies, snapshot extras). Disarm
+// each guard first: chrome.tabs.remove honors beforeunload, so a protected
+// tab with sticky user activation would otherwise pop a "Leave site?"
+// dialog in its window. Marked self-closed so the restore net ignores them.
+async function closeTabs(tabIds) {
+  if (!tabIds.length) return;
+  await markSelfClosed(tabIds);
+  await Promise.all(
+    tabIds.map((id) =>
+      Promise.race([
+        quiet(chrome.tabs.sendMessage, id, { type: "disarm" }, { frameId: 0 }),
+        new Promise((resolve) => setTimeout(resolve, 600)),
+      ]),
+    ),
+  );
+  await quiet(chrome.tabs.remove, tabIds);
 }
 
 // --- messages (content scripts + popup UI) --------------------------------
@@ -893,8 +908,7 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
   if (closeExtras) {
     const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
     if (extras.length) {
-      await markSelfClosed(extras);
-      await quiet(chrome.tabs.remove, extras);
+      await closeTabs(extras);
       closed = extras.length;
     }
   }
@@ -938,6 +952,18 @@ globalThis.truePinToggle = async (tabId) => {
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
+// Test hook: propagate a deliberate close of the group containing tabId
+// (closes every member, disarming guards first) - the mirror path from the
+// bug report, without driving a real close/confirm through puppeteer.
+globalThis.__tpCloseGroupOf = (tabId) =>
+  enqueue(async () => {
+    const mirror = await getMirror();
+    const gid = groupOfTab(mirror, tabId);
+    if (!gid) return { closed: false };
+    await dissolveGroup(mirror, gid, null);
+    await putMirror(mirror);
+    return { closed: true };
+  }, "test-close-group");
 
 // --- popup UI backend -----------------------------------------------------------
 async function handleUi(request) {

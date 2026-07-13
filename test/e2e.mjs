@@ -638,6 +638,60 @@ async function main() {
     assert(!(await findTab("/m1")), "no /m1 resurrected anywhere");
   });
 
+  await test("mirror: propagated close is silent on an activated sibling (no stray dialog)", async () => {
+    // Regression for the reported bug: force-closing an activated pinned tab
+    // in one window popped a "Leave site?" dialog in another window while its
+    // mirror copy was being closed. Both the copy and its sibling are
+    // activated here; neither window may raise a beforeunload dialog.
+    step("open, pin and activate /fbc");
+    const orig = await openPage("/fbc");
+    await setPinned(orig.tab.id, true);
+    await waitFor("protected", async () => (await tabState(orig.tab.id))?.protected === true);
+    await clickPage(orig.page, "/fbc");
+    await waitFor("original activated", async () => (await tabState(orig.tab.id))?.activated === true);
+
+    step("create a second window and wait for its /fbc copy");
+    const pagesBefore = new Set(await browser.pages());
+    const winB = await swEval(async () => (await chrome.windows.create({})).id);
+    const copyTabId = await waitFor(
+      "copy tab in window B",
+      async () => {
+        const copy = (await pinnedOf(winB)).find((p) => p.url.includes("/fbc"));
+        return copy ? copy.id : null;
+      },
+      8000,
+      250,
+    );
+
+    step("activate the copy in window B");
+    const copyPage = (await browser.pages()).find(
+      (p) => !pagesBefore.has(p) && p.url().includes("/fbc"),
+    );
+    assert(copyPage, "copy page handle found");
+    const copyDialogs = watchDialogs(copyPage);
+    await copyPage.bringToFront();
+    await clickPage(copyPage, "/fbc(copy)");
+    await waitFor("copy activated", async () => (await tabState(copyTabId))?.activated === true);
+
+    step("propagate a deliberate close across the group");
+    await swEval((id) => globalThis.__tpCloseGroupOf(id), copyTabId);
+
+    step("verify siblings closed with no beforeunload dialog");
+    await waitFor("all /fbc gone", async () => !(await findTab("/fbc")), 8000, 250);
+    await sleep(800);
+    assert(
+      orig.dialogs.every((d) => d.type !== "beforeunload"),
+      `no dialog in the original window (saw ${JSON.stringify(orig.dialogs)})`,
+    );
+    assert(
+      copyDialogs.every((d) => d.type !== "beforeunload"),
+      `no dialog in the copy window (saw ${JSON.stringify(copyDialogs)})`,
+    );
+    step("close window B");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), winB);
+    await sleep(400);
+  });
+
   await test("mirror: unpinning keeps the tab but closes its copies elsewhere", async () => {
     const s2 = (await pinnedOf(snapWindowId)).find((p) => p.url.includes("/s2"));
     assert(s2, "/s2 original present");
