@@ -118,8 +118,17 @@
       .snap .info {
         flex: 1;
         min-width: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+      }
+      .snap .name {
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .snap .meta {
+        flex: none;
         white-space: nowrap;
       }
       .snap .x {

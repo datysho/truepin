@@ -356,6 +356,55 @@ async function main() {
     );
   });
 
+  await test("reload: hotkey reload passes silently, plain reload still asks", async () => {
+    const clickRetry = async (page, marker) => {
+      // A click right after a reload can race the new execution context.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await clickPage(page, marker);
+          return;
+        } catch (err) {
+          if (attempt >= 3) throw err;
+          await sleep(700);
+        }
+      }
+    };
+    const { page, dialogs, tab } = await openPage("/r1");
+    try {
+      step("pin and activate");
+      await setPinned(tab.id, true);
+      await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+      await waitFor("🔒 title", async () => ((await findTab("/r1"))?.title || "").startsWith("🔒"));
+      await clickRetry(page, "/r1");
+      await waitFor("activated", async () => (await tabState(tab.id))?.activated === true);
+
+      step("reload via hotkey: no dialog");
+      await page.keyboard.down("Control");
+      await page.keyboard.press("KeyR");
+      await page.keyboard.up("Control");
+      await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1000)]);
+      await waitFor(
+        "page reloaded and re-protected",
+        async () => ((await findTab("/r1"))?.title || "").startsWith("🔒"),
+        8000,
+      );
+      assert(dialogs.length === 0, "no dialog on hotkey reload");
+      await sleep(800); // let the new document settle before touching it
+
+      step("plain scripted reload: dialog appears");
+      await clickRetry(page, "/r1"); // fresh document needs fresh activation
+      await waitFor("re-activated", async () => (await tabState(tab.id))?.activated === true);
+      await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1500)]);
+      await waitFor("dialog shown", () => dialogs.length > 0, 6000);
+      assert(dialogs[0].type === "beforeunload", "guard still works without the hotkey");
+      await sleep(300);
+    } finally {
+      // Never leak the pinned /r1 into later tests, pass or fail.
+      await page.close().catch(() => {});
+      await sleep(600);
+    }
+  });
+
   // ---- snapshots + autosave ring + mirroring + i18n -----------------------
   const uiCall = (request) => swEval((r) => globalThis.__tpUiCall(r), request);
   const pinnedOf = (windowId) =>
@@ -375,14 +424,15 @@ async function main() {
   let s1TabId = null;
 
   await test("snapshot: save, mutate, diff-restore (reuse + create + close extra)", async () => {
-    // Clean the pinned /six left over from the previous test.
-    step("cleanup /six");
-    const six = await findTab("/six");
-    await setPinned(six.id, false);
-    await waitFor("/six unprotected", async () => (await tabState(six.id))?.protected === false);
+    // Fresh slate: earlier tests (and their failures) must not leak pins in.
+    step("fresh slate: unpin and close all pinned tabs");
+    const leftovers = await swEval(async () =>
+      (await chrome.tabs.query({ pinned: true })).map((t) => t.id),
+    );
+    for (const id of leftovers) await setPinned(id, false);
     await sleep(900); // unpin grace + unpin-confirm must both pass
-    await removeTab(six.id);
-    await sleep(400);
+    for (const id of leftovers) await removeTab(id);
+    await sleep(500);
 
     const a = await openPage("/s1");
     const b = await openPage("/s2");
@@ -525,6 +575,27 @@ async function main() {
       );
       return snap && snap.urls.length === 2;
     });
+    step("long set name never hides the meta info");
+    await uiCall({
+      type: "ui:saveSnapshot",
+      windowId: snapWindowId,
+      name: "a-very-long-snapshot-name-that-keeps-going-forever",
+    });
+    await page.reload({ timeout: 10_000 });
+    await page.waitForFunction(
+      () => document.querySelectorAll("#snapList .snap").length >= 2,
+      { timeout: 8000 },
+    );
+    const metaOk = await page.evaluate(() =>
+      [...document.querySelectorAll("#snapList .snap")].every((row) => {
+        const meta = row.querySelector(".meta");
+        const rowBox = row.getBoundingClientRect();
+        const metaBox = meta.getBoundingClientRect();
+        return meta.offsetWidth > 0 && metaBox.right <= rowBox.right + 1;
+      }),
+    );
+    assert(metaOk, "meta visible and inside the row for every set");
+    await uiCall({ type: "ui:deleteSnapshot", name: "a-very-long-snapshot-name-that-keeps-go" });
     await uiCall({ type: "ui:deleteSnapshot", name: "second" });
     step("close popup page");
     await page.close().catch(() => {});
@@ -714,6 +785,36 @@ async function main() {
     step("cleanup: close the unpinned /s2");
     await sleep(900);
     await removeTab(s2.id);
+  });
+
+  await test("mirror: a window arriving with its own pin is adopted, not duplicated", async () => {
+    // Simulates a session-restored window: it shows up already containing a
+    // pin of an existing group. The fill must adopt it instead of creating
+    // a second copy - the duplicate bug from the report.
+    const groupUrl = (await pinnedOf(snapWindowId))[0].url;
+    step("create window preloaded with the group's url and pin it quickly");
+    const winC = await swEval(async (u) => {
+      const win = await chrome.windows.create({ url: u });
+      const [tab] = await chrome.tabs.query({ windowId: win.id });
+      if (tab) await chrome.tabs.update(tab.id, { pinned: true });
+      return win.id;
+    }, groupUrl);
+    step("wait for the strip to settle and fill to run");
+    await sleep(3500);
+    const pins = await pinnedOf(winC);
+    const matching = pins.filter((p) => p.url.split("?")[0] === groupUrl.split("?")[0]);
+    assert(
+      matching.length === 1,
+      `exactly one copy of the group in the new window (got ${matching.length})`,
+    );
+    for (const wid of [snapWindowId, mirrorWinId, urlWinId]) {
+      const winPins = await pinnedOf(wid);
+      const count = winPins.filter((p) => p.url.split("?")[0] === groupUrl.split("?")[0]).length;
+      assert(count === 1, `window ${wid} still has exactly one (got ${count})`);
+    }
+    step("close the extra window");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), winC);
+    await sleep(500);
   });
 
   await test("mirrorPinned=false: new window stays empty, groups cleared", async () => {

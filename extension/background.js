@@ -270,7 +270,19 @@ async function registerPinnedTab(tab, settings) {
   if (!settings.mirrorPinned) return;
   if (!tab || tab.id === undefined || tab.incognito) return;
   const mirror = await getMirror();
-  if (groupOfTab(mirror, tab.id)) return; // already bound
+  if (groupOfTab(mirror, tab.id)) {
+    // Already bound (member recorded at create time). Consume the matching
+    // pending record so it cannot mis-bind a future tab.
+    const gid = groupOfTab(mirror, tab.id);
+    const stale = mirror.pending.findIndex(
+      (p) => p.windowId === tab.windowId && p.gid === gid,
+    );
+    if (stale !== -1) {
+      mirror.pending.splice(stale, 1);
+      await putMirror(mirror);
+    }
+    return;
+  }
 
   const url = tabUrl(tab);
   const pendingIndex = mirror.pending.findIndex(
@@ -349,6 +361,15 @@ async function rebuildMirror(settings) {
     await chrome.storage.session.set({ groups: {}, groupOrder: [], pendingCreates: [] });
     return;
   }
+  // At browser startup the session-restored windows are still growing their
+  // tab strips; adopting a half-restored window would duplicate the rest.
+  let previous = -1;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const tabs = await chrome.tabs.query({});
+    if (tabs.length > 0 && tabs.length === previous) break;
+    previous = tabs.length;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
   for (const w of await normalWindows()) {
     await syncWindowFill(w.id, settings);
   }
@@ -408,22 +429,34 @@ async function wasSelfClosed(tabId) {
   return true;
 }
 
-// Close tabs the extension owns (mirror copies, snapshot extras). Disarm
-// each guard first: chrome.tabs.remove honors beforeunload, so a protected
-// tab with sticky user activation would otherwise pop a "Leave site?"
-// dialog in its window. Marked self-closed so the restore net ignores them.
+// Close tabs the extension owns (mirror copies, snapshot extras). Never a
+// dialog, never a partial failure:
+//   1. Ask each guard to stand down (a janky page may answer slowly - give
+//      it time, but do not wait forever).
+//   2. Discard the page: a discarded document has no beforeunload at all,
+//      so the close is guaranteed silent even if the disarm never arrived
+//      (chrome:// pages, frozen renderers). Discard can swap the tab id.
+//   3. Remove each tab individually - a batched tabs.remove() fails as a
+//      whole when any single id is already gone, leaving survivors behind.
+// Marked self-closed first so the restore net ignores all of it.
 async function closeTabs(tabIds) {
   if (!tabIds.length) return;
   await markSelfClosed(tabIds);
   await Promise.all(
-    tabIds.map((id) =>
-      Promise.race([
+    tabIds.map(async (id) => {
+      await Promise.race([
         quiet(chrome.tabs.sendMessage, id, { type: "disarm" }, { frameId: 0 }),
-        new Promise((resolve) => setTimeout(resolve, 600)),
-      ]),
-    ),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+      const discarded = await quiet(chrome.tabs.discard, id);
+      let finalId = id;
+      if (discarded && discarded.id !== undefined && discarded.id !== id) {
+        finalId = discarded.id;
+        await markSelfClosed([finalId]);
+      }
+      await quiet(chrome.tabs.remove, finalId);
+    }),
   );
-  await quiet(chrome.tabs.remove, tabIds);
 }
 
 // --- messages (content scripts + popup UI) --------------------------------
@@ -725,19 +758,36 @@ chrome.windows.onRemoved.addListener((windowId) => {
   }, "window-removed");
 });
 
+// The window's own tab strip must be COMPLETE before we fill gaps: a
+// session-restored window populates its tabs over many milliseconds, and
+// filling too early duplicates every pin that had not appeared yet. Wait
+// until the tab count is non-zero and stable across consecutive polls.
+async function waitForStableStrip(windowId) {
+  let previous = -1;
+  let stable = 0;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const tabs = await quiet(chrome.tabs.query, { windowId });
+    if (tabs === undefined) return false; // window is gone
+    const count = tabs.length;
+    if (count > 0 && count === previous) {
+      stable++;
+      if (stable >= 2) return true;
+    } else {
+      stable = 0;
+    }
+    previous = count;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return true;
+}
+
 // Every new normal window gets a copy of each pinned group.
 chrome.windows.onCreated.addListener((win) => {
   enqueue(async () => {
     const settings = await getSettings();
     if (!settings.mirrorPinned) return;
     if (!win || win.type !== "normal" || win.incognito) return;
-    // Let the window's own tabs appear first (session restore, dragged tab,
-    // "open in new window") - syncWindowFill adopts them before filling gaps.
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const tabs = await chrome.tabs.query({ windowId: win.id }).catch(() => []);
-      if (tabs.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    }
+    if (!(await waitForStableStrip(win.id))) return;
     await syncWindowFill(win.id, settings);
   }, "window-created");
 });

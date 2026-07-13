@@ -15,7 +15,8 @@
   let locked = false;
   let showIcon = true;
   let orphaned = false; // a newer copy of this script took over
-  let closing = false; // the extension is about to close this tab itself
+  let closingUntil = 0; // the extension is about to close this tab itself
+  let reloadPassUntil = 0; // a reload hotkey was just pressed
   let activationSent = false;
   let titleObserver = null;
   let titleDeferred = false;
@@ -46,11 +47,14 @@
     window.addEventListener(
       "beforeunload",
       (event) => {
-        // `closing` = the extension itself is removing this tab (mirror
-        // propagation, snapshot restore). Those closes must be silent -
-        // chrome.tabs.remove would otherwise trigger this dialog on any
-        // tab that has sticky user activation.
-        if (!locked || orphaned || closing) return;
+        // closingUntil: the extension itself is removing this tab (mirror
+        // propagation, snapshot restore) - chrome.tabs.remove would
+        // otherwise trigger this dialog on any tab with user activation.
+        // Time-boxed so a tab that survives a botched close re-arms itself.
+        // reloadPassUntil: a reload hotkey was pressed - reloading is safe
+        // (the tab is not going anywhere), no need to ask.
+        const now = Date.now();
+        if (!locked || orphaned || now < closingUntil || now < reloadPassUntil) return;
         event.preventDefault();
         // Kept for older Chrome; modern Chrome only needs preventDefault().
         event.returnValue = "";
@@ -58,14 +62,28 @@
       true,
     );
 
+    // Cmd/Ctrl+R, F5 and their Shift variants: let the reload through
+    // without a dialog. The toolbar Reload button cannot be detected ahead
+    // of time and still asks - that is Chrome, not us.
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        const isR = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "r";
+        const isF5 = event.key === "F5";
+        if (isR || isF5) reloadPassUntil = Date.now() + 3000;
+      },
+      { capture: true, passive: true },
+    );
+
     chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       if (orphaned || !request) return;
       if (request.type === "disarm") {
-        closing = true;
+        closingUntil = Date.now() + 5000;
         sendResponse({ ok: true });
         return;
       }
       if (request.type === "apply") {
+        closingUntil = 0; // a state push means the tab is staying
         applyState(request);
         sendResponse({ ok: true });
       }
