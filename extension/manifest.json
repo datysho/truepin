@@ -2,14 +2,15 @@
   "manifest_version": 3,
   "name": "TruePin",
   "description": "Pinned tabs, done right: a confirmation dialog on close plus auto-restore of protected tabs that were closed silently.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "homepage_url": "https://github.com/datysho/truepin",
   "permissions": [
     "tabs",
     "scripting",
     "storage",
     "sessions",
-    "notifications"
+    "notifications",
+    "favicon"
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -31,7 +32,8 @@
       "48": "icons/unlocked-48.png",
       "128": "icons/unlocked-128.png"
     },
-    "default_title": "TruePin"
+    "default_title": "TruePin",
+    "default_popup": "popup.html"
   },
   "options_ui": {
     "page": "options.html",

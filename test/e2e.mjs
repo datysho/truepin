@@ -332,6 +332,199 @@ async function main() {
     );
   });
 
+  // ---- 2.1.0: snapshots + follow mode -----------------------------------
+  const uiCall = (request) => swEval((r) => globalThis.__tpUiCall(r), request);
+  const pinnedOf = (windowId) =>
+    swEval(
+      async (wid) =>
+        (await chrome.tabs.query({ windowId: wid, pinned: true })).map((t) => ({
+          id: t.id,
+          url: t.url || t.pendingUrl || "",
+        })),
+      windowId,
+    );
+
+  let snapWindowId = null;
+  let s1TabId = null;
+
+  await test("snapshot: save, mutate, diff-restore (reuse + create + close extra)", async () => {
+    // Clean the pinned /six left over from the previous test.
+    step("cleanup /six");
+    const six = await findTab("/six");
+    await setPinned(six.id, false);
+    await waitFor("/six unprotected", async () => (await tabState(six.id))?.protected === false);
+    await sleep(600); // stay clear of the unpin-close grace window
+    await removeTab(six.id);
+    await sleep(400);
+
+    const a = await openPage("/s1");
+    const b = await openPage("/s2");
+    step("pin s1, s2");
+    await setPinned(a.tab.id, true);
+    await setPinned(b.tab.id, true);
+    await waitFor(
+      "both protected",
+      async () =>
+        (await tabState(a.tab.id))?.protected === true &&
+        (await tabState(b.tab.id))?.protected === true,
+    );
+    s1TabId = a.tab.id;
+    snapWindowId = await swEval(async (id) => (await chrome.tabs.get(id)).windowId, a.tab.id);
+
+    await waitFor(
+      "auto-snapshot picked up the set",
+      async () => {
+        const auto = await swEval(
+          async () => (await chrome.storage.local.get("autoSnapshot")).autoSnapshot,
+        );
+        return (
+          auto &&
+          auto.urls.some((u) => u.includes("/s1")) &&
+          auto.urls.some((u) => u.includes("/s2"))
+        );
+      },
+      6000,
+      300,
+    );
+
+    step("save snapshot 'work'");
+    const saved = await uiCall({ type: "ui:saveSnapshot", windowId: snapWindowId, name: "work" });
+    assert(saved.ok, "saved");
+
+    step("mutate: drop s2, add s3");
+    await setPinned(b.tab.id, false);
+    await waitFor("s2 unprotected", async () => (await tabState(b.tab.id))?.protected === false);
+    await sleep(600); // stay clear of the unpin-close grace window
+    await removeTab(b.tab.id);
+    await sleep(400);
+    assert(!(await findTab("/s2")), "s2 closed");
+    const c = await openPage("/s3");
+    await setPinned(c.tab.id, true);
+    await waitFor("s3 protected", async () => (await tabState(c.tab.id))?.protected === true);
+
+    step("restore snapshot 'work'");
+    const result = await uiCall({
+      type: "ui:restoreSnapshot",
+      windowId: snapWindowId,
+      name: "work",
+    });
+    assert(result.ok, "restore ok");
+    assert(
+      result.reused === 1 && result.created === 1 && result.closed === 1,
+      `diff counts (${JSON.stringify(result)})`,
+    );
+
+    step("verify restored set");
+    await waitFor("pinned set matches snapshot", async () => {
+      const pins = await pinnedOf(snapWindowId);
+      return (
+        pins.length === 2 &&
+        pins[0].url.includes("/s1") &&
+        pins[1].url.includes("/s2") &&
+        pins[0].id === s1TabId
+      );
+    });
+    await sleep(1500); // the closed extra must not be resurrected by the restore net
+    assert(!(await findTab("/s3")), "extra tab stays closed (self-close guard)");
+    const undo = await swEval(
+      async () => (await chrome.storage.local.get("autoSnapshot")).autoSnapshot,
+    );
+    assert(undo.urls.some((u) => u.includes("/s3")), "replaced set kept in auto-snapshot (undo)");
+  });
+
+  await test("popup: renders pinned set and snapshots, saves a set via UI", async () => {
+    step("open popup page");
+    const swTarget = await browser.waitForTarget(
+      (t) => t.type() === "service_worker" && t.url().endsWith("background.js"),
+    );
+    const extensionId = new URL(swTarget.url()).host;
+    const page = await browser.newPage();
+    await page.goto(`chrome-extension://${extensionId}/popup.html`, { timeout: 15_000 });
+    step("wait for popup render");
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll("#pinnedList li").length >= 2 &&
+        document.querySelectorAll("#snapList .snap").length >= 2,
+      { timeout: 8000 },
+    );
+    const names = await page.evaluate(() =>
+      [...document.querySelectorAll("#snapList .snap .info")].map((el) => el.textContent),
+    );
+    assert(names.some((n) => n.includes("work")), "'work' listed");
+    assert(names.some((n) => n.includes("Авто")), "auto-snapshot listed");
+    step("save 'second' via UI");
+    await page.type("#snapName", "second");
+    await page.click("#saveBtn");
+    await waitFor("snap:second in sync storage", async () => {
+      const snap = await swEval(
+        async () => (await chrome.storage.sync.get("snap:second"))["snap:second"],
+      );
+      return snap && snap.urls.length === 2;
+    });
+    await uiCall({ type: "ui:deleteSnapshot", name: "second" });
+    step("close popup page");
+    await page.close().catch(() => {});
+  });
+
+  let followWinId = null;
+
+  await test("follow: new empty window pulls the pinned tabs over", async () => {
+    const before = await pinnedOf(snapWindowId);
+    assert(before.length === 2, "two pinned before");
+    step("create empty window");
+    followWinId = await swEval(async () => (await chrome.windows.create({})).id);
+    await waitFor(
+      "pins moved to the new window",
+      async () => {
+        const pins = await pinnedOf(followWinId);
+        return pins.length === 2 && pins[0].url.includes("/s1") && pins[1].url.includes("/s2");
+      },
+      8000,
+      250,
+    );
+    const moved = await pinnedOf(followWinId);
+    assert(
+      moved[0].id === before[0].id && moved[1].id === before[1].id,
+      "same tabs moved, not recreated",
+    );
+    assert((await pinnedOf(snapWindowId)).length === 0, "old window has no pinned left");
+    await waitFor(
+      "still protected after the move",
+      async () => (await tabState(s1TabId))?.protected === true,
+    );
+  });
+
+  await test("follow guard: window opened with a URL keeps pins in place", async () => {
+    step("create window with url");
+    const urlWinId = await swEval(
+      async (u) => (await chrome.windows.create({ url: u })).id,
+      `${baseUrl}/g1`,
+    );
+    await sleep(1800);
+    assert((await pinnedOf(urlWinId)).length === 0, "url window got no pins");
+    assert((await pinnedOf(followWinId)).length === 2, "pins stayed home");
+  });
+
+  await test("follow toggle off: new empty window stays empty", async () => {
+    step("disable followNewWindow");
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: {
+          autoLockPinned: true,
+          showIcon: true,
+          restoreClosed: true,
+          restoreCooldownSec: 15,
+          followNewWindow: false,
+          autoSnapshot: true,
+        },
+      }),
+    );
+    const plainWinId = await swEval(async () => (await chrome.windows.create({})).id);
+    await sleep(1800);
+    assert((await pinnedOf(plainWinId)).length === 0, "no pins moved");
+    assert((await pinnedOf(followWinId)).length === 2, "pins stayed");
+  });
+
   step("browser close");
   await browser.close();
   server.close();

@@ -1,7 +1,7 @@
 // TruePin - service worker.
 //
 // Protection model, per tab:
-//   protected = manual override (toolbar click), otherwise
+//   protected = manual override (popup switch), otherwise
 //               settings.autoLockPinned && tab.pinned
 //
 // Two layers of defense:
@@ -14,6 +14,14 @@
 //      reopened via chrome.sessions. Closing the same URL again within the
 //      cooldown is treated as deliberate and allowed through.
 //
+// On top of protection:
+//   - Follow mode: opening a genuinely new empty window moves the pinned
+//     tabs from the previously focused window into it.
+//   - Snapshots: named sets of pinned tabs (storage.sync) plus a rolling
+//     auto-snapshot (storage.local) as a safety net / undo. Restoring is a
+//     diff: matching tabs are reused in place (no reload), missing ones are
+//     created, extras are closed (guarded from the restore net).
+//
 // All per-tab state lives in chrome.storage.session: it survives service
 // worker suspension and resets together with tab ids on browser restart.
 
@@ -22,6 +30,8 @@ const DEFAULTS = {
   showIcon: true,
   restoreClosed: true,
   restoreCooldownSec: 15,
+  followNewWindow: true,
+  autoSnapshot: true,
 };
 
 const SCRIPTABLE = /^(https?|file|ftp):/i;
@@ -30,6 +40,12 @@ const RESTORE_MARKS_TTL_MS = 10 * 60 * 1000;
 // {pinned:false} and only then onRemoved. Within this window an unpin does
 // not yet count as "the user removed protection".
 const CLOSE_UNPIN_GRACE_MS = 500;
+// A window is "genuinely new" (Cmd+N) while its only tab is an empty page.
+const NEW_TAB_URLS = /^(chrome:\/\/newtab|chrome:\/\/new-tab-page|about:blank)/i;
+const SNAP_PREFIX = "snap:";
+const AUTO_SNAP_KEY = "autoSnapshot";
+const SELF_CLOSED_TTL_MS = 60 * 1000;
+const AUTO_SNAP_DEBOUNCE_MS = 1500;
 
 // --- serialized state mutations ----------------------------------------
 // storage.session reads/writes are read-modify-write; a single queue keeps
@@ -133,9 +149,7 @@ function updateAction(tabId, isProtected) {
   chrome.action
     .setTitle({
       tabId,
-      title: isProtected
-        ? "TruePin: вкладка защищена (клик - снять защиту)"
-        : "TruePin: без защиты (клик - защитить)",
+      title: isProtected ? "TruePin: вкладка защищена" : "TruePin: без защиты",
     })
     .catch(() => {});
 }
@@ -152,8 +166,7 @@ async function refreshTab(tab, settings) {
 
 // --- bootstrap -----------------------------------------------------------
 // On install/update the declared content scripts are NOT injected into tabs
-// that are already open - the single biggest reason the original extension
-// felt broken. Inject programmatically into everything scriptable.
+// that are already open. Inject programmatically into everything scriptable.
 async function bootstrapAll(injectScripts) {
   const settings = await getSettings();
   const tabs = await chrome.tabs.query({});
@@ -181,11 +194,37 @@ chrome.storage.onChanged.addListener((changes, area) => {
   enqueue(() => bootstrapAll(false), "settings-changed");
 });
 
-// --- content script messages ---------------------------------------------
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (!request || !sender.tab || sender.tab.id === undefined || sender.tab.id < 0) {
-    return;
+// --- self-closed markers ------------------------------------------------
+// Tabs the extension closes itself (snapshot restore) must not be brought
+// back by the restore net.
+async function markSelfClosed(tabIds) {
+  const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
+  const now = Date.now();
+  for (const [id, ts] of Object.entries(selfClosed)) {
+    if (now - ts > SELF_CLOSED_TTL_MS) delete selfClosed[id];
   }
+  for (const id of tabIds) selfClosed[id] = now;
+  await chrome.storage.session.set({ selfClosed });
+}
+
+async function wasSelfClosed(tabId) {
+  const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
+  if (!(tabId in selfClosed)) return false;
+  delete selfClosed[tabId];
+  await chrome.storage.session.set({ selfClosed });
+  return true;
+}
+
+// --- messages (content scripts + popup UI) --------------------------------
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (!request || typeof request.type !== "string") return;
+
+  if (request.type.startsWith("ui:")) {
+    enqueue(() => handleUi(request).then(sendResponse), request.type);
+    return true;
+  }
+
+  if (!sender.tab || sender.tab.id === undefined || sender.tab.id < 0) return;
   const tab = sender.tab;
 
   if (request.type === "hello") {
@@ -232,6 +271,7 @@ chrome.tabs.onCreated.addListener((tab) => {
   enqueue(async () => {
     const settings = await getSettings();
     await refreshTab(tab, settings);
+    if (tab.pinned) scheduleAutoSnapshot();
   }, "created");
 });
 
@@ -263,6 +303,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
     await putTabState(tabId, state);
     applyToTab(tabId, state, settings);
+    if (changeInfo.pinned !== undefined || (changeInfo.url && tab.pinned)) {
+      scheduleAutoSnapshot();
+    }
   }, "updated");
 });
 
@@ -282,6 +325,9 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     await dropTabState(tabId);
     traceDiag(`removed tab=${tabId} winClosing=${removeInfo.isWindowClosing} state=${JSON.stringify(state)}`);
     if (!state) return;
+    if (state.pinned || state.protected) scheduleAutoSnapshot();
+    // Closed by the extension itself (snapshot restore): never bring back.
+    if (await wasSelfClosed(tabId)) return;
     // A protection drop caused by an unpin milliseconds ago is Chrome's own
     // unpin-on-close, not a user decision - the tab still counts as protected.
     const closeUnpinGrace =
@@ -289,7 +335,8 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
       state.unpinnedAt &&
       Date.now() - state.unpinnedAt < CLOSE_UNPIN_GRACE_MS;
     if (!state.protected && !closeUnpinGrace) return;
-    // Whole window closing is a deliberate act; Cmd+Shift+T brings it back.
+    // Whole window closing is a deliberate act; Cmd+Shift+T brings it back
+    // (and the auto-snapshot keeps the pinned set restorable from the popup).
     if (removeInfo.isWindowClosing) return;
     // The page had user activation, so Chrome showed the confirmation
     // dialog and the user chose to leave. Respect that.
@@ -347,12 +394,12 @@ function notifyRestored(settings) {
       message:
         "Защищённая вкладка была закрыта без подтверждения - вернул её на место. " +
         `Закрыть насовсем: закрой её ещё раз в течение ${settings.restoreCooldownSec} с, ` +
-        "сними закрепление или выключи замок кликом по иконке расширения.",
+        "сними закрепление или выключи замок в попапе расширения.",
     })
     .catch(() => {});
 }
 
-// --- toolbar button: manual lock toggle -------------------------------------
+// --- manual lock toggle ------------------------------------------------------
 async function toggleTab(tab) {
   const settings = await getSettings();
   const state = (await getTabState(tab.id)) || newTabState(tab);
@@ -366,13 +413,244 @@ async function toggleTab(tab) {
   return state;
 }
 
-chrome.action.onClicked.addListener((tab) => {
-  if (!tab || tab.id === undefined || tab.id < 0) return;
-  enqueue(() => toggleTab(tab), "toggle");
-});
-
 // Exposed for the e2e suite (reachable from extension contexts only).
 globalThis.truePinToggle = async (tabId) => {
   const tab = await chrome.tabs.get(tabId);
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
+globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
+
+// --- window focus tracking ---------------------------------------------------
+async function rememberFocus(windowId) {
+  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+  const next = [windowId, ...focusStack.filter((id) => id !== windowId)].slice(0, 10);
+  await chrome.storage.session.set({ focusStack: next });
+}
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  enqueue(() => rememberFocus(windowId), "focus");
+});
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  enqueue(async () => {
+    const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+    await chrome.storage.session.set({ focusStack: focusStack.filter((id) => id !== windowId) });
+  }, "window-removed");
+});
+
+// --- follow mode: pinned tabs move into a genuinely new window ----------------
+chrome.windows.onCreated.addListener((win) => {
+  enqueue(() => followIntoWindow(win), "window-created");
+});
+
+async function followIntoWindow(win) {
+  const settings = await getSettings();
+  if (!settings.followNewWindow) return;
+  if (!win || win.type !== "normal" || win.incognito) return;
+
+  // A genuinely new window (Cmd+N) has exactly one tab on an empty page.
+  // Windows born from dragging a tab out, "open link in new window",
+  // session restore or OAuth popups all fail this check and keep their tabs.
+  let tabs = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    tabs = await chrome.tabs.query({ windowId: win.id }).catch(() => []);
+    if (tabs.length > 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  if (tabs.length !== 1) return;
+  const url = tabUrl(tabs[0]);
+  if (url && !NEW_TAB_URLS.test(url)) return;
+
+  const donorId = await findDonorWindow(win.id);
+  if (donorId === null) return;
+  const pinned = await chrome.tabs.query({ windowId: donorId, pinned: true });
+  if (!pinned.length) return;
+
+  traceDiag(`follow: moving ${pinned.length} pinned from win=${donorId} to win=${win.id}`);
+  for (let i = 0; i < pinned.length; i++) {
+    try {
+      // Cross-window move drops the pin; re-pin right away. No onRemoved
+      // fires for moves, and the unpin grace keeps protection continuous.
+      await chrome.tabs.move(pinned[i].id, { windowId: win.id, index: i });
+      await chrome.tabs.update(pinned[i].id, { pinned: true });
+    } catch (err) {
+      traceDiag(`follow: move failed for tab=${pinned[i].id}: ${err && err.message}`);
+    }
+  }
+}
+
+// The most recently focused normal window (excluding the given one) that has
+// pinned tabs; also serves as "the" pinned-home window for auto-snapshots.
+async function findDonorWindow(excludeWindowId) {
+  const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  const withPins = new Set();
+  for (const w of windows) {
+    if (w.id === excludeWindowId || w.incognito) continue;
+    if ((w.tabs || []).some((t) => t.pinned)) withPins.add(w.id);
+  }
+  if (!withPins.size) return null;
+  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+  for (const id of focusStack) {
+    if (withPins.has(id)) return id;
+  }
+  return withPins.values().next().value;
+}
+
+// --- snapshots -----------------------------------------------------------------
+function snapshotFromTabs(tabs) {
+  return {
+    urls: tabs.map((t) => tabUrl(t)),
+    titles: tabs.map((t) => t.title || ""),
+    savedAt: Date.now(),
+  };
+}
+
+const pinnedTabsOf = (windowId) => chrome.tabs.query({ windowId, pinned: true });
+
+async function listSnapshots() {
+  const all = await chrome.storage.sync.get(null);
+  const named = Object.entries(all)
+    .filter(([key]) => key.startsWith(SNAP_PREFIX))
+    .map(([key, value]) => ({
+      name: key.slice(SNAP_PREFIX.length),
+      count: (value.urls || []).length,
+      savedAt: value.savedAt || 0,
+      auto: false,
+    }))
+    .sort((a, b) => b.savedAt - a.savedAt);
+  const { [AUTO_SNAP_KEY]: auto } = await chrome.storage.local.get(AUTO_SNAP_KEY);
+  const result = [];
+  if (auto && (auto.urls || []).length) {
+    result.push({ name: "Авто", count: auto.urls.length, savedAt: auto.savedAt || 0, auto: true });
+  }
+  return result.concat(named);
+}
+
+// Rolling safety net: the last non-empty pinned set. Never overwritten with
+// an empty set, so "closed the window with all my pins" stays recoverable.
+let autoSnapTimer = null;
+function scheduleAutoSnapshot() {
+  clearTimeout(autoSnapTimer);
+  autoSnapTimer = setTimeout(() => {
+    enqueue(writeAutoSnapshot, "auto-snapshot");
+  }, AUTO_SNAP_DEBOUNCE_MS);
+}
+
+async function writeAutoSnapshot() {
+  const settings = await getSettings();
+  if (!settings.autoSnapshot) return;
+  const homeId = await findDonorWindow(chrome.windows.WINDOW_ID_NONE);
+  if (homeId === null) return; // no pinned tabs anywhere: keep the last set
+  const pinned = await pinnedTabsOf(homeId);
+  if (!pinned.length) return;
+  const snap = snapshotFromTabs(pinned);
+  const { [AUTO_SNAP_KEY]: prev } = await chrome.storage.local.get(AUTO_SNAP_KEY);
+  if (prev && prev.urls && prev.urls.join("\n") === snap.urls.join("\n")) return;
+  await chrome.storage.local.set({ [AUTO_SNAP_KEY]: snap });
+}
+
+async function saveSnapshot(name, windowId) {
+  const pinned = await pinnedTabsOf(windowId);
+  if (!pinned.length) return { error: "Нет закреплённых вкладок" };
+  const clean = String(name || "").trim().slice(0, 40);
+  if (!clean) return { error: "Пустое имя" };
+  await chrome.storage.sync.set({ [SNAP_PREFIX + clean]: snapshotFromTabs(pinned) });
+  return { ok: true };
+}
+
+async function deleteSnapshot(name) {
+  await chrome.storage.sync.remove(SNAP_PREFIX + name);
+  return { ok: true };
+}
+
+// Diff-restore: reuse matching pinned tabs in place (no reload), create the
+// missing ones, close the extras. The set being replaced is written to the
+// auto-snapshot first, so a restore is always undoable from "Авто".
+async function restoreSnapshot({ name, auto }, windowId) {
+  let snap;
+  if (auto) {
+    ({ [AUTO_SNAP_KEY]: snap } = await chrome.storage.local.get(AUTO_SNAP_KEY));
+  } else {
+    ({ [SNAP_PREFIX + name]: snap } = await chrome.storage.sync.get(SNAP_PREFIX + name));
+  }
+  if (!snap || !(snap.urls || []).length) return { error: "Набор пуст или не найден" };
+
+  const current = await pinnedTabsOf(windowId);
+  if (current.length && !auto) {
+    await chrome.storage.local.set({ [AUTO_SNAP_KEY]: snapshotFromTabs(current) });
+  }
+
+  const used = new Set();
+  let reused = 0;
+  let created = 0;
+  for (let i = 0; i < snap.urls.length; i++) {
+    const url = snap.urls[i];
+    const match = current.find((t) => !used.has(t.id) && tabUrl(t) === url);
+    if (match) {
+      used.add(match.id);
+      reused++;
+      if (match.index !== i) {
+        await chrome.tabs.move(match.id, { index: i }).catch(() => {});
+      }
+    } else {
+      try {
+        const tab = await chrome.tabs.create({ windowId, url, pinned: true, index: i, active: false });
+        used.add(tab.id);
+        created++;
+      } catch (err) {
+        traceDiag(`restoreSnapshot: create failed for ${url}: ${err && err.message}`);
+      }
+    }
+  }
+  const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
+  if (extras.length) {
+    await markSelfClosed(extras);
+    await chrome.tabs.remove(extras).catch(() => {});
+  }
+  traceDiag(`restoreSnapshot: reused=${reused} created=${created} closed=${extras.length}`);
+  return { ok: true, reused, created, closed: extras.length };
+}
+
+// --- popup UI backend -----------------------------------------------------------
+async function handleUi(request) {
+  switch (request.type) {
+    case "ui:getState": {
+      const settings = await getSettings();
+      const pinned = await pinnedTabsOf(request.windowId);
+      let active = null;
+      if (request.tabId !== undefined) {
+        const tab = await chrome.tabs.get(request.tabId).catch(() => null);
+        if (tab) {
+          const state = (await getTabState(tab.id)) || newTabState(tab);
+          active = {
+            id: tab.id,
+            title: tab.title || "",
+            pinned: !!tab.pinned,
+            protected: computeProtected({ ...state, pinned: !!tab.pinned }, settings),
+          };
+        }
+      }
+      return {
+        pinned: pinned.map((t) => ({ id: t.id, title: t.title || tabUrl(t), url: tabUrl(t) })),
+        active,
+        snapshots: await listSnapshots(),
+        settings,
+      };
+    }
+    case "ui:toggle": {
+      const tab = await chrome.tabs.get(request.tabId).catch(() => null);
+      if (!tab) return { error: "Вкладка не найдена" };
+      const state = await toggleTab(tab);
+      return { ok: true, protected: state.protected };
+    }
+    case "ui:saveSnapshot":
+      return saveSnapshot(request.name, request.windowId);
+    case "ui:deleteSnapshot":
+      return deleteSnapshot(request.name);
+    case "ui:restoreSnapshot":
+      return restoreSnapshot({ name: request.name, auto: request.auto }, request.windowId);
+    default:
+      return { error: `unknown ${request.type}` };
+  }
+}

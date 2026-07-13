@@ -4,6 +4,8 @@ const DEFAULTS = {
   showIcon: true,
   restoreClosed: true,
   restoreCooldownSec: 15,
+  followNewWindow: true,
+  autoSnapshot: true,
 };
 const FIELDS = Object.keys(DEFAULTS);
 
