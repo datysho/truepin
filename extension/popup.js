@@ -60,7 +60,7 @@ function snapRow({ label, meta, onRestore, onDelete, tooltip }) {
   nameEl.title = tooltip || label;
   const metaEl = document.createElement("span");
   metaEl.className = "meta muted";
-  metaEl.textContent = `· ${meta}`;
+  metaEl.textContent = meta;
   info.append(nameEl, metaEl);
   const restoreBtn = document.createElement("button");
   restoreBtn.textContent = t("restoreBtn");

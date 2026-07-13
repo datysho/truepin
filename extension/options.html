@@ -6,97 +6,187 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, -apple-system, sans-serif;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --bg: #ffffff;
+        --text: #202124;
+        --muted: #5f6368;
+        --border: #dadce0;
+        --hover: #f1f3f4;
+        --accent: #1a73e8;
+        --track: #c4c7c5;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #292a2d;
+          --text: #e8eaed;
+          --muted: #9aa0a6;
+          --border: #3c4043;
+          --hover: #3c4043;
+          --accent: #8ab4f8;
+          --track: #5f6368;
+        }
       }
       body {
-        margin: 16px;
-        min-width: 400px;
-        font-size: 14px;
+        margin: 0;
+        padding: 18px 20px;
+        min-width: 420px;
+        font-size: 13px;
         line-height: 1.5;
+        background: var(--bg);
+        color: var(--text);
       }
       h2 {
-        margin: 0 0 12px;
-        font-size: 16px;
+        margin: 0 0 6px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .setting {
+        border-bottom: 1px solid var(--border);
+        padding: 10px 0;
+      }
+      .setting:last-of-type {
+        border-bottom: none;
       }
       label {
         display: flex;
-        gap: 8px;
-        align-items: baseline;
-        margin: 10px 0 2px;
+        align-items: center;
+        gap: 14px;
+        cursor: pointer;
+      }
+      label > span:first-child {
+        flex: 1;
       }
       .hint {
-        color: color-mix(in srgb, currentColor 60%, transparent);
+        color: var(--muted);
         font-size: 12px;
-        margin: 0 0 6px 26px;
+        margin: 4px 0 0;
+        max-width: 380px;
       }
-      .num {
-        width: 60px;
+
+      /* Material-style switch */
+      input.switch {
+        appearance: none;
+        width: 38px;
+        height: 22px;
+        border-radius: 11px;
+        background: var(--track);
+        position: relative;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        flex: none;
+        margin: 0;
       }
+      input.switch::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        transition: transform 0.15s ease;
+      }
+      input.switch:checked {
+        background: var(--accent);
+      }
+      input.switch:checked::before {
+        transform: translateX(16px);
+      }
+
       select {
         font: inherit;
-        padding: 2px 6px;
+        padding: 5px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+      }
+      select:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
       }
       #saved {
         font-size: 12px;
-        color: #2e7d32;
+        color: #188038;
         visibility: hidden;
-        margin: 10px 0 0;
+        margin: 12px 0 0;
+      }
+      @media (prefers-color-scheme: dark) {
+        #saved {
+          color: #81c995;
+        }
       }
     </style>
   </head>
   <body>
     <h2>TruePin</h2>
 
-    <label>
-      <input type="checkbox" id="autoLockPinned" />
-      <span data-i18n="optAutoLock"></span>
-    </label>
-    <p class="hint" data-i18n="optAutoLockHint"></p>
+    <div class="setting">
+      <label>
+        <span data-i18n="optAutoLock"></span>
+        <input type="checkbox" id="autoLockPinned" class="switch" />
+      </label>
+      <p class="hint" data-i18n="optAutoLockHint"></p>
+    </div>
 
-    <label>
-      <input type="checkbox" id="showIcon" />
-      <span data-i18n="optShowIcon"></span>
-    </label>
+    <div class="setting">
+      <label>
+        <span data-i18n="optShowIcon"></span>
+        <input type="checkbox" id="showIcon" class="switch" />
+      </label>
+    </div>
 
-    <label>
-      <input type="checkbox" id="mirrorPinned" />
-      <span data-i18n="optMirror"></span>
-    </label>
-    <p class="hint" data-i18n="optMirrorHint"></p>
+    <div class="setting">
+      <label>
+        <span data-i18n="optMirror"></span>
+        <input type="checkbox" id="mirrorPinned" class="switch" />
+      </label>
+      <p class="hint" data-i18n="optMirrorHint"></p>
+    </div>
 
-    <label>
-      <input type="checkbox" id="autoSnapshot" />
-      <span data-i18n="optAutoSnaps"></span>
-    </label>
-    <p class="hint" data-i18n="optAutoSnapsHint"></p>
+    <div class="setting">
+      <label>
+        <span data-i18n="optAutoSnaps"></span>
+        <input type="checkbox" id="autoSnapshot" class="switch" />
+      </label>
+      <p class="hint" data-i18n="optAutoSnapsHint"></p>
+    </div>
 
-    <label>
-      <input type="checkbox" id="notifyReopen" />
-      <span data-i18n="optNotify"></span>
-    </label>
+    <div class="setting">
+      <label>
+        <span data-i18n="optNotify"></span>
+        <input type="checkbox" id="notifyReopen" class="switch" />
+      </label>
+    </div>
 
-    <label>
-      <span data-i18n="optIconStyle"></span>
-      <select id="iconStyle">
-        <option value="color" data-i18n="iconStyleColor"></option>
-        <option value="mono" data-i18n="iconStyleMono"></option>
-      </select>
-    </label>
+    <div class="setting">
+      <label>
+        <span data-i18n="optIconStyle"></span>
+        <select id="iconStyle">
+          <option value="color" data-i18n="iconStyleColor"></option>
+          <option value="mono" data-i18n="iconStyleMono"></option>
+        </select>
+      </label>
+    </div>
 
-    <label>
-      <span data-i18n="optLang"></span>
-      <select id="language">
-        <option value="auto"></option>
-        <option value="en">English</option>
-        <option value="ru">Русский</option>
-        <option value="uk">Українська</option>
-        <option value="de">Deutsch</option>
-        <option value="fr">Français</option>
-        <option value="es">Español</option>
-        <option value="pt">Português</option>
-        <option value="zh_CN">中文（简体）</option>
-      </select>
-    </label>
+    <div class="setting">
+      <label>
+        <span data-i18n="optLang"></span>
+        <select id="language">
+          <option value="auto"></option>
+          <option value="en">English</option>
+          <option value="ru">Русский</option>
+          <option value="uk">Українська</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="pt">Português</option>
+          <option value="zh_CN">中文（简体）</option>
+        </select>
+      </label>
+    </div>
 
     <p id="saved" data-i18n="saved"></p>
 
