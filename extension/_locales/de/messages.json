@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Angepinnte Tabs, richtig gemacht: Schließbestätigung, Auto-Wiederherstellung still geschlossener Tabs, Spiegelung in allen Fenstern und Sets."
+  },
+  "actionProtected": {
+    "message": "TruePin: Tab geschützt"
+  },
+  "actionUnprotected": {
+    "message": "TruePin: nicht geschützt"
+  },
+  "notifTitle": {
+    "message": "TruePin: Tab wiederhergestellt"
+  },
+  "notifMsg": {
+    "message": "Ein geschützter Tab wurde ohne Bestätigung geschlossen und wurde wiederhergestellt. Endgültig schließen: innerhalb von $1 s erneut schließen, Tab lösen oder das Schloss im Popup ausschalten."
+  },
+  "popupLockLabel": {
+    "message": "Diesen Tab sperren"
+  },
+  "hintProtectedPinned": {
+    "message": "Geschützt (angepinnt)"
+  },
+  "hintProtectedManual": {
+    "message": "Manuell geschützt"
+  },
+  "hintAutoOff": {
+    "message": "Auto-Schutz angepinnter Tabs ist aus"
+  },
+  "hintPlain": {
+    "message": "Normaler Tab"
+  },
+  "pinnedHeader": {
+    "message": "Angepinnt"
+  },
+  "noPinned": {
+    "message": "Keine angepinnten Tabs"
+  },
+  "snapNamePlaceholder": {
+    "message": "Set-Name (z. B. Arbeit)"
+  },
+  "saveBtn": {
+    "message": "Speichern"
+  },
+  "updateBtn": {
+    "message": "Aktualisieren"
+  },
+  "snapsHeader": {
+    "message": "Sets"
+  },
+  "noSnaps": {
+    "message": "Noch keine Sets - speichere das aktuelle."
+  },
+  "autoHeader": {
+    "message": "Autospeicherungen"
+  },
+  "noAutoSnaps": {
+    "message": "Noch nichts hier"
+  },
+  "restoreBtn": {
+    "message": "Wiederherstellen"
+  },
+  "deleteTitle": {
+    "message": "Set löschen"
+  },
+  "confirmDelete": {
+    "message": "sicher?"
+  },
+  "statusNameEmpty": {
+    "message": "Gib dem Set einen Namen"
+  },
+  "statusSaved": {
+    "message": "Set „$1“ gespeichert ($2)"
+  },
+  "statusDeleted": {
+    "message": "Set „$1“ gelöscht"
+  },
+  "statusRestored": {
+    "message": "Wiederhergestellt: $1 geöffnet, $2 unverändert, $3 geschlossen"
+  },
+  "statusUndo": {
+    "message": "Das vorherige Set liegt in den Autospeicherungen"
+  },
+  "relNow": {
+    "message": "gerade eben"
+  },
+  "relMin": {
+    "message": "vor $1 Min."
+  },
+  "relHours": {
+    "message": "vor $1 Std."
+  },
+  "tabs_one": {
+    "message": "$1 Tab"
+  },
+  "tabs_few": {
+    "message": "$1 Tabs"
+  },
+  "tabs_many": {
+    "message": "$1 Tabs"
+  },
+  "tabs_other": {
+    "message": "$1 Tabs"
+  },
+  "optAutoLock": {
+    "message": "Angepinnte Tabs automatisch schützen"
+  },
+  "optAutoLockHint": {
+    "message": "Das Lösen entfernt auch den Schutz."
+  },
+  "optShowIcon": {
+    "message": "🔒 zum Titel eines geschützten Tabs hinzufügen"
+  },
+  "optRestoreNet": {
+    "message": "Einen ohne Bestätigung geschlossenen geschützten Tab wiederherstellen"
+  },
+  "optRestoreNetHint": {
+    "message": "Chrome zeigt den „Seite verlassen?“-Dialog erst nach einer Interaktion mit der Seite. Wurde ein geschützter Tab still geschlossen (Seite unberührt, aus dem Speicher entladen, chrome://) - bringt ihn die Erweiterung zurück."
+  },
+  "optCooldownPre": {
+    "message": "Erneutes Schließen innerhalb von"
+  },
+  "optCooldownPost": {
+    "message": "Sekunden schließt endgültig"
+  },
+  "optMirror": {
+    "message": "Angepinnte Tabs in allen Fenstern spiegeln"
+  },
+  "optMirrorHint": {
+    "message": "Ein neues Fenster erhält eine Kopie jedes angepinnten Tabs; Anpinnen, Lösen und Schließen werden zwischen Fenstern synchronisiert. Inkognito bleibt unberührt."
+  },
+  "optAutoSnaps": {
+    "message": "Autospeicherungen des Sets behalten (letzte 10)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Wird gespeichert, wenn ein angepinnter Tab hinzugefügt, entfernt oder auf eine andere Seite wechselt (reine Query-String-Änderungen zählen nicht). Aus dem Popup wiederherstellbar - auch nach dem Schließen eines ganzen Fensters."
+  },
+  "optLang": {
+    "message": "Sprache"
+  },
+  "langAuto": {
+    "message": "Auto (Browsersprache)"
+  },
+  "saved": {
+    "message": "Gespeichert"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - Einstellungen"
+  },
+  "optionsLink": {
+    "message": "Einstellungen"
+  }
+}

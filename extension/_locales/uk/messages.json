@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Закріплені вкладки як слід: підтвердження закриття, авто-відновлення тихо закритих, дзеркалювання у всіх вікнах і набори."
+  },
+  "actionProtected": {
+    "message": "TruePin: вкладку захищено"
+  },
+  "actionUnprotected": {
+    "message": "TruePin: без захисту"
+  },
+  "notifTitle": {
+    "message": "TruePin: вкладку відновлено"
+  },
+  "notifMsg": {
+    "message": "Захищену вкладку закрили без підтвердження - повернув її на місце. Щоб закрити назавжди: закрий її ще раз протягом $1 с, відкріпи або вимкни замок у попапі."
+  },
+  "popupLockLabel": {
+    "message": "Замок на цій вкладці"
+  },
+  "hintProtectedPinned": {
+    "message": "Захищена (закріплена)"
+  },
+  "hintProtectedManual": {
+    "message": "Захищена вручну"
+  },
+  "hintAutoOff": {
+    "message": "Автозахист закріплених вимкнено"
+  },
+  "hintPlain": {
+    "message": "Звичайна вкладка"
+  },
+  "pinnedHeader": {
+    "message": "Закріплені"
+  },
+  "noPinned": {
+    "message": "Закріплених вкладок немає"
+  },
+  "snapNamePlaceholder": {
+    "message": "Назва набору (наприклад, Робота)"
+  },
+  "saveBtn": {
+    "message": "Зберегти"
+  },
+  "updateBtn": {
+    "message": "Оновити"
+  },
+  "snapsHeader": {
+    "message": "Набори"
+  },
+  "noSnaps": {
+    "message": "Наборів поки немає - збережи поточний."
+  },
+  "autoHeader": {
+    "message": "Автозбереження"
+  },
+  "noAutoSnaps": {
+    "message": "Поки порожньо"
+  },
+  "restoreBtn": {
+    "message": "Відновити"
+  },
+  "deleteTitle": {
+    "message": "Видалити набір"
+  },
+  "confirmDelete": {
+    "message": "точно?"
+  },
+  "statusNameEmpty": {
+    "message": "Дай набору назву"
+  },
+  "statusSaved": {
+    "message": "Набір «$1» збережено ($2)"
+  },
+  "statusDeleted": {
+    "message": "Набір «$1» видалено"
+  },
+  "statusRestored": {
+    "message": "Відновлено: відкрито $1, на місці $2, закрито $3"
+  },
+  "statusUndo": {
+    "message": "Попередній набір - в автозбереженнях"
+  },
+  "relNow": {
+    "message": "щойно"
+  },
+  "relMin": {
+    "message": "$1 хв тому"
+  },
+  "relHours": {
+    "message": "$1 год тому"
+  },
+  "tabs_one": {
+    "message": "$1 вкладка"
+  },
+  "tabs_few": {
+    "message": "$1 вкладки"
+  },
+  "tabs_many": {
+    "message": "$1 вкладок"
+  },
+  "tabs_other": {
+    "message": "$1 вкладки"
+  },
+  "optAutoLock": {
+    "message": "Автоматично захищати закріплені вкладки"
+  },
+  "optAutoLockHint": {
+    "message": "Відкріплення знімає і захист."
+  },
+  "optShowIcon": {
+    "message": "Додавати 🔒 до заголовка захищеної вкладки"
+  },
+  "optRestoreNet": {
+    "message": "Відновлювати захищену вкладку, закриту без підтвердження"
+  },
+  "optRestoreNetHint": {
+    "message": "Chrome показує діалог «Leave site?» лише після взаємодії зі сторінкою. Якщо захищена вкладка закрилася тихо (сторінку не чіпали, вивантажено з пам'яті, chrome://) - розширення поверне її на місце."
+  },
+  "optCooldownPre": {
+    "message": "Повторне закриття протягом"
+  },
+  "optCooldownPost": {
+    "message": "секунд закриває назавжди"
+  },
+  "optMirror": {
+    "message": "Дзеркалювати закріплені у всіх вікнах"
+  },
+  "optMirrorHint": {
+    "message": "Нове вікно отримує копію кожної закріпленої; закріплення, відкріплення і закриття синхронізуються між вікнами. Інкогніто не чіпаємо."
+  },
+  "optAutoSnaps": {
+    "message": "Вести автозбереження набору закріплених (останні 10)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Пишеться, коли закріплена додається, видаляється або переходить на іншу сторінку (зміна лише GET-параметрів не рахується). Відновлюється з попапа - зокрема після закриття цілого вікна."
+  },
+  "optLang": {
+    "message": "Мова"
+  },
+  "langAuto": {
+    "message": "Авто (мова браузера)"
+  },
+  "saved": {
+    "message": "Збережено"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - налаштування"
+  },
+  "optionsLink": {
+    "message": "Налаштування"
+  }
+}

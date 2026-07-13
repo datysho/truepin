@@ -32,6 +32,19 @@ for (const p of ["/one", "/two", "/three"]) {
   const page = await browser.newPage();
   await page.goto(`${base}${p}`);
 }
+await worker.evaluate(() =>
+  chrome.storage.sync.set({
+    settings: {
+      autoLockPinned: true,
+      showIcon: true,
+      restoreClosed: true,
+      restoreCooldownSec: 15,
+      mirrorPinned: true,
+      autoSnapshot: true,
+      language: "ru",
+    },
+  }),
+);
 await worker.evaluate(async (b) => {
   const tabs = await chrome.tabs.query({});
   for (const t of tabs) {
@@ -45,9 +58,13 @@ await sleep(300);
 
 const extId = new URL(target.url()).host;
 const popup = await browser.newPage();
-await popup.setViewport({ width: 340, height: 560, deviceScaleFactor: 2 });
+await popup.setViewport({ width: 340, height: 640, deviceScaleFactor: 2 });
 await popup.goto(`chrome-extension://${extId}/popup.html`);
 await sleep(800);
+await popup.evaluate(() => {
+  document.getElementById("autoDetails").open = true;
+});
+await sleep(200);
 await popup.screenshot({ path: OUT, fullPage: true });
 console.log("saved", OUT);
 await browser.close();

@@ -6,8 +6,21 @@ let activeTabId = null;
 let state = null;
 
 const $ = (id) => document.getElementById(id);
+const t = (key, subs) => tpI18n.t(key, subs);
 
 const send = (message) => chrome.runtime.sendMessage(message);
+
+function localizeDom() {
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    el.textContent = t(el.dataset.i18n);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-title]")) {
+    el.title = t(el.dataset.i18nTitle);
+  }
+}
 
 function favicon(url) {
   const u = new URL(chrome.runtime.getURL("/_favicon/"));
@@ -16,21 +29,13 @@ function favicon(url) {
   return u.toString();
 }
 
-function tabsWord(n) {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} вкладка`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} вкладки`;
-  return `${n} вкладок`;
-}
-
 function relTime(ts) {
   if (!ts) return "";
   const d = Date.now() - ts;
-  if (d < 60_000) return "только что";
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)} мин назад`;
-  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)} ч назад`;
-  return new Date(ts).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+  if (d < 60_000) return t("relNow");
+  if (d < 3_600_000) return t("relMin", [Math.floor(d / 60_000)]);
+  if (d < 86_400_000) return t("relHours", [Math.floor(d / 3_600_000)]);
+  return new Date(ts).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
 }
 
 function setStatus(text, isError) {
@@ -44,6 +49,43 @@ async function refresh() {
   render();
 }
 
+function snapRow({ label, meta, onRestore, onDelete, tooltip }) {
+  const row = document.createElement("div");
+  row.className = "snap";
+  const info = document.createElement("span");
+  info.className = "info";
+  info.textContent = label;
+  if (tooltip) info.title = tooltip;
+  const metaEl = document.createElement("span");
+  metaEl.className = "muted";
+  metaEl.textContent = ` · ${meta}`;
+  info.append(metaEl);
+  const restoreBtn = document.createElement("button");
+  restoreBtn.textContent = t("restoreBtn");
+  restoreBtn.addEventListener("click", onRestore);
+  row.append(info, restoreBtn);
+  if (onDelete) {
+    const x = document.createElement("button");
+    x.className = "x";
+    x.textContent = "✕";
+    x.title = t("deleteTitle");
+    x.addEventListener("click", () => {
+      if (x.dataset.confirm) {
+        onDelete();
+      } else {
+        x.dataset.confirm = "1";
+        x.textContent = t("confirmDelete");
+        setTimeout(() => {
+          delete x.dataset.confirm;
+          x.textContent = "✕";
+        }, 2500);
+      }
+    });
+    row.append(x);
+  }
+  return row;
+}
+
 function render() {
   // Lock switch for the active tab.
   const active = state.active;
@@ -52,11 +94,11 @@ function render() {
     ? ""
     : active.protected
       ? active.pinned
-        ? "Защищена (закреплена)"
-        : "Защищена вручную"
+        ? t("hintProtectedPinned")
+        : t("hintProtectedManual")
       : active.pinned
-        ? "Автозащита закреплённых выключена"
-        : "Обычная вкладка";
+        ? t("hintAutoOff")
+        : t("hintPlain");
 
   // Current pinned tabs.
   const list = $("pinnedList");
@@ -65,7 +107,7 @@ function render() {
   if (!state.pinned.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = "Закреплённых вкладок нет";
+    li.textContent = t("noPinned");
     list.append(li);
   }
   for (const tab of state.pinned) {
@@ -82,103 +124,91 @@ function render() {
   $("saveBtn").disabled = !state.pinned.length;
   updateSaveButton();
 
-  // Snapshots.
+  // Named snapshots.
   const snapList = $("snapList");
   snapList.textContent = "";
   if (!state.snapshots.length) {
     const div = document.createElement("div");
     div.className = "muted";
-    div.textContent = "Наборов пока нет - сохрани текущий.";
+    div.textContent = t("noSnaps");
     snapList.append(div);
   }
   for (const snap of state.snapshots) {
-    const row = document.createElement("div");
-    row.className = "snap";
-    const info = document.createElement("span");
-    info.className = "info";
-    info.textContent = snap.auto ? "Авто" : snap.name;
-    const meta = document.createElement("span");
-    meta.className = "muted";
-    meta.textContent = ` · ${tabsWord(snap.count)} · ${relTime(snap.savedAt)}`;
-    info.append(meta);
-    if (snap.auto) {
-      info.title = "Последний набор закреплённых: страховка и «отменить» после восстановления";
-    }
-    const restoreBtn = document.createElement("button");
-    restoreBtn.textContent = "Восстановить";
-    restoreBtn.addEventListener("click", () => restoreSnap(snap));
-    row.append(info, restoreBtn);
-    if (!snap.auto) {
-      const x = document.createElement("button");
-      x.className = "x";
-      x.textContent = "✕";
-      x.title = "Удалить набор";
-      x.addEventListener("click", async () => {
-        if (x.dataset.confirm) {
+    snapList.append(
+      snapRow({
+        label: snap.name,
+        meta: `${tpI18n.tabsCount(snap.count)} · ${relTime(snap.savedAt)}`,
+        onRestore: () => restoreSnap({ name: snap.name }),
+        onDelete: async () => {
           await send({ type: "ui:deleteSnapshot", name: snap.name });
-          setStatus(`Набор «${snap.name}» удалён`);
+          setStatus(t("statusDeleted", [snap.name]));
           refresh();
-        } else {
-          x.dataset.confirm = "1";
-          x.textContent = "точно?";
-          setTimeout(() => {
-            delete x.dataset.confirm;
-            x.textContent = "✕";
-          }, 2500);
-        }
-      });
-      row.append(x);
-    }
-    snapList.append(row);
+        },
+      }),
+    );
+  }
+
+  // Autosaves dropdown.
+  const autoList = $("autoList");
+  autoList.textContent = "";
+  $("autoCount").textContent = state.autoSnaps.length ? `(${state.autoSnaps.length})` : "";
+  if (!state.autoSnaps.length) {
+    const div = document.createElement("div");
+    div.className = "muted";
+    div.textContent = t("noAutoSnaps");
+    autoList.append(div);
+  }
+  for (const snap of state.autoSnaps) {
+    autoList.append(
+      snapRow({
+        label: relTime(snap.savedAt),
+        meta: tpI18n.tabsCount(snap.count),
+        onRestore: () => restoreSnap({ autoIndex: snap.index }),
+      }),
+    );
   }
 }
 
 function updateSaveButton() {
   const name = $("snapName").value.trim();
-  const exists = state && state.snapshots.some((s) => !s.auto && s.name === name);
-  $("saveBtn").textContent = exists ? "Обновить" : "Сохранить";
+  const exists = state && state.snapshots.some((s) => s.name === name);
+  $("saveBtn").textContent = exists ? t("updateBtn") : t("saveBtn");
 }
 
 async function saveSnap() {
   const name = $("snapName").value.trim();
   if (!name) {
-    setStatus("Дай набору имя", true);
+    setStatus(t("statusNameEmpty"), true);
     $("snapName").focus();
     return;
   }
   const result = await send({ type: "ui:saveSnapshot", windowId, name });
   if (result.error) {
-    setStatus(result.error, true);
+    setStatus(t(result.error), true);
     return;
   }
-  setStatus(`Набор «${name}» сохранён (${tabsWord(state.pinned.length)})`);
+  setStatus(t("statusSaved", [name, tpI18n.tabsCount(state.pinned.length)]));
   $("snapName").value = "";
   refresh();
 }
 
-async function restoreSnap(snap) {
-  const result = await send({
-    type: "ui:restoreSnapshot",
-    windowId,
-    name: snap.auto ? undefined : snap.name,
-    auto: snap.auto,
-  });
+async function restoreSnap(target) {
+  const result = await send({ type: "ui:restoreSnapshot", windowId, ...target });
   if (result.error) {
-    setStatus(result.error, true);
+    setStatus(t(result.error), true);
     return;
   }
-  const parts = [];
-  if (result.created) parts.push(`открыто ${result.created}`);
-  if (result.reused) parts.push(`на месте ${result.reused}`);
-  if (result.closed) parts.push(`закрыто ${result.closed}`);
   setStatus(
-    `Восстановлено (${parts.join(", ") || "без изменений"})` +
-      (snap.auto ? "" : ". Прежний набор - в «Авто»"),
+    `${t("statusRestored", [result.created, result.reused, result.closed])}. ${t("statusUndo")}`,
   );
   refresh();
 }
 
 async function init() {
+  const { settings } = await chrome.storage.sync.get("settings");
+  await tpI18n.init((settings && settings.language) || "auto");
+  localizeDom();
+
   const win = await chrome.windows.getCurrent();
   windowId = win.id;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -187,7 +217,7 @@ async function init() {
   $("lockToggle").addEventListener("change", async () => {
     if (activeTabId === undefined) return;
     const result = await send({ type: "ui:toggle", tabId: activeTabId });
-    if (result && result.error) setStatus(result.error, true);
+    if (result && result.error) setStatus(t(result.error), true);
     refresh();
   });
   $("saveBtn").addEventListener("click", saveSnap);

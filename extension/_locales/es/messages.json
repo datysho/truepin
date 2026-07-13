@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Pestañas fijadas, bien hechas: confirmación de cierre, restauración automática de pestañas cerradas en silencio, espejo en todas las ventanas y conjuntos."
+  },
+  "actionProtected": {
+    "message": "TruePin: pestaña protegida"
+  },
+  "actionUnprotected": {
+    "message": "TruePin: sin protección"
+  },
+  "notifTitle": {
+    "message": "TruePin: pestaña restaurada"
+  },
+  "notifMsg": {
+    "message": "Una pestaña protegida se cerró sin confirmación, así que la recuperé. Para cerrarla definitivamente: ciérrala de nuevo en $1 s, desfíjala o apaga el candado en el popup."
+  },
+  "popupLockLabel": {
+    "message": "Bloquear esta pestaña"
+  },
+  "hintProtectedPinned": {
+    "message": "Protegida (fijada)"
+  },
+  "hintProtectedManual": {
+    "message": "Protegida manualmente"
+  },
+  "hintAutoOff": {
+    "message": "La protección automática de fijadas está apagada"
+  },
+  "hintPlain": {
+    "message": "Pestaña normal"
+  },
+  "pinnedHeader": {
+    "message": "Fijadas"
+  },
+  "noPinned": {
+    "message": "No hay pestañas fijadas"
+  },
+  "snapNamePlaceholder": {
+    "message": "Nombre del conjunto (p. ej., Trabajo)"
+  },
+  "saveBtn": {
+    "message": "Guardar"
+  },
+  "updateBtn": {
+    "message": "Actualizar"
+  },
+  "snapsHeader": {
+    "message": "Conjuntos"
+  },
+  "noSnaps": {
+    "message": "Aún no hay conjuntos: guarda el actual."
+  },
+  "autoHeader": {
+    "message": "Autoguardados"
+  },
+  "noAutoSnaps": {
+    "message": "Nada por ahora"
+  },
+  "restoreBtn": {
+    "message": "Restaurar"
+  },
+  "deleteTitle": {
+    "message": "Eliminar conjunto"
+  },
+  "confirmDelete": {
+    "message": "¿seguro?"
+  },
+  "statusNameEmpty": {
+    "message": "Dale un nombre al conjunto"
+  },
+  "statusSaved": {
+    "message": "Conjunto «$1» guardado ($2)"
+  },
+  "statusDeleted": {
+    "message": "Conjunto «$1» eliminado"
+  },
+  "statusRestored": {
+    "message": "Restaurado: $1 abiertas, $2 en su sitio, $3 cerradas"
+  },
+  "statusUndo": {
+    "message": "El conjunto anterior está en autoguardados"
+  },
+  "relNow": {
+    "message": "ahora mismo"
+  },
+  "relMin": {
+    "message": "hace $1 min"
+  },
+  "relHours": {
+    "message": "hace $1 h"
+  },
+  "tabs_one": {
+    "message": "$1 pestaña"
+  },
+  "tabs_few": {
+    "message": "$1 pestañas"
+  },
+  "tabs_many": {
+    "message": "$1 pestañas"
+  },
+  "tabs_other": {
+    "message": "$1 pestañas"
+  },
+  "optAutoLock": {
+    "message": "Proteger automáticamente las pestañas fijadas"
+  },
+  "optAutoLockHint": {
+    "message": "Desfijar también quita la protección."
+  },
+  "optShowIcon": {
+    "message": "Añadir 🔒 al título de una pestaña protegida"
+  },
+  "optRestoreNet": {
+    "message": "Restaurar una pestaña protegida cerrada sin confirmación"
+  },
+  "optRestoreNetHint": {
+    "message": "Chrome muestra el diálogo «¿Salir del sitio?» solo tras interactuar con la página. Si una pestaña protegida se cerró en silencio (página sin tocar, descargada de memoria, chrome://), la extensión la devuelve."
+  },
+  "optCooldownPre": {
+    "message": "Cerrar de nuevo dentro de"
+  },
+  "optCooldownPost": {
+    "message": "segundos cierra definitivamente"
+  },
+  "optMirror": {
+    "message": "Reflejar las pestañas fijadas en todas las ventanas"
+  },
+  "optMirrorHint": {
+    "message": "Una ventana nueva recibe una copia de cada pestaña fijada; fijar, desfijar y cerrar se sincronizan entre ventanas. Incógnito no se toca."
+  },
+  "optAutoSnaps": {
+    "message": "Guardar autoguardados del conjunto (últimos 10)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Se guarda cuando una pestaña fijada se añade, se quita o navega a otra página (los cambios solo de parámetros GET se ignoran). Restaurable desde el popup, incluso tras cerrar una ventana entera."
+  },
+  "optLang": {
+    "message": "Idioma"
+  },
+  "langAuto": {
+    "message": "Auto (idioma del navegador)"
+  },
+  "saved": {
+    "message": "Guardado"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - ajustes"
+  },
+  "optionsLink": {
+    "message": "Ajustes"
+  }
+}

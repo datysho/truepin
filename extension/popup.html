@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
   <head>
     <meta charset="utf-8" />
     <style>
@@ -130,6 +130,21 @@
       .snap .x:hover {
         opacity: 1;
       }
+      details {
+        margin-top: 4px;
+      }
+      summary {
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.55;
+        user-select: none;
+      }
+      summary::marker {
+        font-size: 10px;
+      }
       #status {
         min-height: 16px;
         padding: 2px 12px 8px;
@@ -153,33 +168,38 @@
     <header>
       <img src="icons/locked-32.png" alt="" />
       <span class="name">TruePin</span>
-      <a href="#" id="openOptions" title="Настройки">⚙</a>
+      <a href="#" id="openOptions" data-i18n-title="optionsLink">⚙</a>
     </header>
 
     <section>
       <label class="row">
-        <span class="switch-label">Замок на этой вкладке</span>
+        <span class="switch-label" data-i18n="popupLockLabel"></span>
         <input type="checkbox" id="lockToggle" />
       </label>
       <div class="muted" id="lockHint"></div>
     </section>
 
     <section>
-      <h3>Закреплённые <span id="pinCount"></span></h3>
+      <h3><span data-i18n="pinnedHeader"></span> <span id="pinCount"></span></h3>
       <ul class="tab-list" id="pinnedList"></ul>
       <div class="save-row">
-        <input type="text" id="snapName" placeholder="Имя набора (например, Работа)" maxlength="40" />
-        <button class="primary" id="saveBtn">Сохранить</button>
+        <input type="text" id="snapName" data-i18n-placeholder="snapNamePlaceholder" maxlength="40" />
+        <button class="primary" id="saveBtn"></button>
       </div>
     </section>
 
     <section>
-      <h3>Наборы</h3>
+      <h3 data-i18n="snapsHeader"></h3>
       <div id="snapList"></div>
+      <details id="autoDetails">
+        <summary><span data-i18n="autoHeader"></span> <span id="autoCount"></span></summary>
+        <div id="autoList"></div>
+      </details>
     </section>
 
     <div id="status"></div>
 
+    <script src="i18n.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

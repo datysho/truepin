@@ -14,24 +14,30 @@
 //      reopened via chrome.sessions. Closing the same URL again within the
 //      cooldown is treated as deliberate and allowed through.
 //
-// On top of protection:
-//   - Follow mode: opening a genuinely new empty window moves the pinned
-//     tabs from the previously focused window into it.
-//   - Snapshots: named sets of pinned tabs (storage.sync) plus a rolling
-//     auto-snapshot (storage.local) as a safety net / undo. Restoring is a
-//     diff: matching tabs are reused in place (no reload), missing ones are
-//     created, extras are closed (guarded from the restore net).
+// Mirroring: pinned tabs form logical GROUPS that exist in every normal
+// window. A new window gets a copy of each group; pinning a tab creates
+// copies elsewhere; a deliberate close or an unpin dissolves the group in
+// all windows. Copies are live independent instances of the same page -
+// navigation inside one copy is not forced onto its siblings.
 //
-// All per-tab state lives in chrome.storage.session: it survives service
-// worker suspension and resets together with tab ids on browser restart.
+// Snapshots: named sets of pinned tabs (storage.sync) plus a ring of the
+// last 10 autosaves (storage.local). An autosave happens when the set
+// changes structurally: a pin is added, removed, or navigates to a
+// different page - query-string-only changes are ignored.
+//
+// All per-tab and group state lives in chrome.storage.session: it survives
+// service worker suspension and resets together with tab ids on restart.
+
+importScripts("i18n.js");
 
 const DEFAULTS = {
   autoLockPinned: true,
   showIcon: true,
   restoreClosed: true,
   restoreCooldownSec: 15,
-  followNewWindow: true,
+  mirrorPinned: true,
   autoSnapshot: true,
+  language: "auto",
 };
 
 const SCRIPTABLE = /^(https?|file|ftp):/i;
@@ -40,22 +46,22 @@ const RESTORE_MARKS_TTL_MS = 10 * 60 * 1000;
 // {pinned:false} and only then onRemoved. Within this window an unpin does
 // not yet count as "the user removed protection".
 const CLOSE_UNPIN_GRACE_MS = 500;
-// A window is "genuinely new" (Cmd+N) while its only tab is an empty page.
-const NEW_TAB_URLS = /^(chrome:\/\/newtab|chrome:\/\/new-tab-page|about:blank)/i;
-const SNAP_PREFIX = "snap:";
-const AUTO_SNAP_KEY = "autoSnapshot";
+// A real user unpin is confirmed when the tab still exists this long after
+// the unpin event (a close-unpin would have removed it by then).
+const UNPIN_CONFIRM_MS = 750;
 const SELF_CLOSED_TTL_MS = 60 * 1000;
+const AUTO_SNAPS_KEY = "autoSnaps";
+const AUTO_SNAPS_MAX = 10;
 const AUTO_SNAP_DEBOUNCE_MS = 1500;
+const SNAP_PREFIX = "snap:";
 
 // --- serialized state mutations ----------------------------------------
-// storage.session reads/writes are read-modify-write; a single queue keeps
-// concurrent events (hello vs onUpdated vs onRemoved) from interleaving.
 let queueTail = Promise.resolve();
 // Diagnostics, readable from the SW console: chrome://extensions -> service worker.
 globalThis.__tpDiag = { queued: 0, finished: 0, last: "", trace: [] };
 function traceDiag(entry) {
   globalThis.__tpDiag.trace.push(entry);
-  if (globalThis.__tpDiag.trace.length > 30) globalThis.__tpDiag.trace.shift();
+  if (globalThis.__tpDiag.trace.length > 40) globalThis.__tpDiag.trace.shift();
 }
 function enqueue(job, label = "job") {
   globalThis.__tpDiag.queued++;
@@ -82,10 +88,28 @@ async function getSettings() {
   return { ...DEFAULTS, ...(settings || {}) };
 }
 
+// --- i18n ------------------------------------------------------------------
+let i18nReady = null;
+function ensureI18n() {
+  i18nReady ??= getSettings().then((settings) => tpI18n.init(settings.language));
+  return i18nReady;
+}
+
 const stateKey = (tabId) => `t${tabId}`;
 
 // A restoring/navigating tab often has no committed url yet, only pendingUrl.
 const tabUrl = (tab) => (tab && (tab.url || tab.pendingUrl)) || "";
+
+// Page identity ignoring query string and hash: "the same page" for group
+// matching and for autosave triggering.
+function pathKey(url) {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url || "";
+  }
+}
 
 async function getTabState(tabId) {
   const record = await chrome.storage.session.get(stateKey(tabId));
@@ -118,8 +142,6 @@ function computeProtected(state, settings) {
 }
 
 function applyToTab(tabId, state, settings) {
-  // Push to the content script; harmless when none is running yet
-  // (chrome:// pages, tab still loading) - the script pulls on start anyway.
   chrome.tabs
     .sendMessage(
       tabId,
@@ -146,12 +168,14 @@ function updateAction(tabId, isProtected) {
       },
     })
     .catch(() => {});
-  chrome.action
-    .setTitle({
-      tabId,
-      title: isProtected ? "TruePin: вкладка защищена" : "TruePin: без защиты",
-    })
-    .catch(() => {});
+  ensureI18n().then(() => {
+    chrome.action
+      .setTitle({
+        tabId,
+        title: tpI18n.t(isProtected ? "actionProtected" : "actionUnprotected"),
+      })
+      .catch(() => {});
+  });
 }
 
 async function refreshTab(tab, settings) {
@@ -162,6 +186,158 @@ async function refreshTab(tab, settings) {
   await putTabState(tab.id, state);
   applyToTab(tab.id, state, settings);
   return state;
+}
+
+// --- pin groups (mirroring) -----------------------------------------------
+// groups: { [gid]: { url, members: { [windowId]: tabId } } }
+// order:  [gid] in pin-strip order.
+// pending: [{ windowId, gid, url }] - copies we asked Chrome to create.
+async function getMirror() {
+  const { groups = {}, groupOrder = [], pendingCreates = [] } =
+    await chrome.storage.session.get(["groups", "groupOrder", "pendingCreates"]);
+  return { groups, order: groupOrder, pending: pendingCreates };
+}
+
+async function putMirror(mirror) {
+  await chrome.storage.session.set({
+    groups: mirror.groups,
+    groupOrder: mirror.order,
+    pendingCreates: mirror.pending,
+  });
+}
+
+function groupOfTab(mirror, tabId) {
+  for (const [gid, group] of Object.entries(mirror.groups)) {
+    for (const memberId of Object.values(group.members)) {
+      if (memberId === tabId) return gid;
+    }
+  }
+  return null;
+}
+
+async function nextGid() {
+  const { groupSeq = 0 } = await chrome.storage.session.get("groupSeq");
+  await chrome.storage.session.set({ groupSeq: groupSeq + 1 });
+  return `g${groupSeq + 1}`;
+}
+
+async function normalWindows() {
+  const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
+  return windows.filter((w) => !w.incognito);
+}
+
+// Create a mirror copy of a group in a window; the pending record lets the
+// onCreated handler adopt the new tab instead of treating it as a user pin.
+async function createCopy(mirror, gid, windowId, index) {
+  const group = mirror.groups[gid];
+  mirror.pending.push({ windowId, gid, url: group.url });
+  try {
+    const tab = await chrome.tabs.create({
+      windowId,
+      url: group.url,
+      pinned: true,
+      index,
+      active: false,
+    });
+    group.members[windowId] = tab.id;
+  } catch (err) {
+    traceDiag(`createCopy failed win=${windowId} gid=${gid}: ${err && err.message}`);
+    mirror.pending = mirror.pending.filter((p) => !(p.windowId === windowId && p.gid === gid));
+  }
+}
+
+// A pinned tab appeared (user pin, mirror copy, restore, session restore):
+// bind it to a group - by pending record, by page identity, or as a new
+// group that then gets mirrored into every other window.
+async function registerPinnedTab(tab, settings) {
+  if (!settings.mirrorPinned) return;
+  if (!tab || tab.id === undefined || tab.incognito) return;
+  const mirror = await getMirror();
+  if (groupOfTab(mirror, tab.id)) return; // already bound
+
+  const url = tabUrl(tab);
+  const pendingIndex = mirror.pending.findIndex(
+    (p) => p.windowId === tab.windowId && pathKey(p.url) === pathKey(url),
+  );
+  if (pendingIndex !== -1) {
+    const { gid } = mirror.pending[pendingIndex];
+    mirror.pending.splice(pendingIndex, 1);
+    if (mirror.groups[gid]) mirror.groups[gid].members[tab.windowId] = tab.id;
+    await putMirror(mirror);
+    return;
+  }
+
+  const adoptable = mirror.order.find((gid) => {
+    const group = mirror.groups[gid];
+    return group && group.members[tab.windowId] === undefined && pathKey(group.url) === pathKey(url);
+  });
+  if (adoptable) {
+    mirror.groups[adoptable].members[tab.windowId] = tab.id;
+    await putMirror(mirror);
+    return;
+  }
+
+  // New group: user pinned a tab. Mirror it into every other window.
+  const gid = await nextGid();
+  mirror.groups[gid] = { url, members: { [tab.windowId]: tab.id } };
+  const position = Math.min(Math.max(tab.index, 0), mirror.order.length);
+  mirror.order.splice(position, 0, gid);
+  traceDiag(`group ${gid} created for ${pathKey(url)} @win=${tab.windowId}`);
+  for (const w of await normalWindows()) {
+    if (w.id !== tab.windowId && mirror.groups[gid].members[w.id] === undefined) {
+      await createCopy(mirror, gid, w.id, position);
+    }
+  }
+  await putMirror(mirror);
+  scheduleAutoSnapshot();
+}
+
+// Drop a group everywhere (deliberate close or confirmed unpin).
+// keepTabId survives (the tab the user unpinned stays as a regular tab).
+async function dissolveGroup(mirror, gid, keepTabId) {
+  const group = mirror.groups[gid];
+  if (!group) return;
+  const victims = Object.values(group.members).filter(
+    (tabId) => tabId !== keepTabId,
+  );
+  delete mirror.groups[gid];
+  mirror.order = mirror.order.filter((g) => g !== gid);
+  if (victims.length) {
+    await markSelfClosed(victims);
+    await chrome.tabs.remove(victims).catch(() => {});
+  }
+  traceDiag(`group ${gid} dissolved, closed ${victims.length} sibling(s)`);
+}
+
+// Ensure a window holds one member of every group: adopt what matches,
+// create what is missing. Never closes anything - used for new windows,
+// bootstrap and gap-filling.
+async function syncWindowFill(windowId, settings) {
+  if (!settings.mirrorPinned) return;
+  const existing = await chrome.tabs.query({ windowId, pinned: true }).catch(() => []);
+  for (const tab of existing) {
+    await registerPinnedTab(tab, settings);
+  }
+  const mirror = await getMirror();
+  let changed = false;
+  for (let i = 0; i < mirror.order.length; i++) {
+    const gid = mirror.order[i];
+    if (mirror.groups[gid].members[windowId] === undefined) {
+      await createCopy(mirror, gid, windowId, i);
+      changed = true;
+    }
+  }
+  if (changed) await putMirror(mirror);
+}
+
+async function rebuildMirror(settings) {
+  if (!settings.mirrorPinned) {
+    await chrome.storage.session.set({ groups: {}, groupOrder: [], pendingCreates: [] });
+    return;
+  }
+  for (const w of await normalWindows()) {
+    await syncWindowFill(w.id, settings);
+  }
 }
 
 // --- bootstrap -----------------------------------------------------------
@@ -183,20 +359,23 @@ async function bootstrapAll(injectScripts) {
         .catch(() => {}); // restricted or unloaded pages
     }
   }
+  await rebuildMirror(settings);
+  scheduleAutoSnapshot();
 }
 
 chrome.runtime.onInstalled.addListener(() => enqueue(() => bootstrapAll(true), "installed"));
 chrome.runtime.onStartup.addListener(() => enqueue(() => bootstrapAll(false), "startup"));
 
-// Settings changed (options page) - recompute every tab.
+// Settings changed (options page) - recompute every tab, reload language.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync" || !changes.settings) return;
+  i18nReady = null;
   enqueue(() => bootstrapAll(false), "settings-changed");
 });
 
 // --- self-closed markers ------------------------------------------------
-// Tabs the extension closes itself (snapshot restore) must not be brought
-// back by the restore net.
+// Tabs the extension closes itself (mirroring, snapshot restore) must not
+// be brought back by the restore net and must not re-propagate closes.
 async function markSelfClosed(tabIds) {
   const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
   const now = Date.now();
@@ -271,7 +450,10 @@ chrome.tabs.onCreated.addListener((tab) => {
   enqueue(async () => {
     const settings = await getSettings();
     await refreshTab(tab, settings);
-    if (tab.pinned) scheduleAutoSnapshot();
+    if (tab.pinned) {
+      await registerPinnedTab(tab, settings);
+      scheduleAutoSnapshot();
+    }
   }, "created");
 });
 
@@ -303,11 +485,50 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
     await putTabState(tabId, state);
     applyToTab(tabId, state, settings);
-    if (changeInfo.pinned !== undefined || (changeInfo.url && tab.pinned)) {
+
+    // Mirroring bookkeeping.
+    if (changeInfo.pinned === true) {
+      await registerPinnedTab(tab, settings);
       scheduleAutoSnapshot();
+    }
+    if (changeInfo.pinned === false) {
+      scheduleUnpinConfirm(tabId);
+      scheduleAutoSnapshot();
+    }
+    if (changeInfo.url && tab.pinned) {
+      const mirror = await getMirror();
+      const gid = groupOfTab(mirror, tabId);
+      if (gid) {
+        const oldKey = pathKey(mirror.groups[gid].url);
+        mirror.groups[gid].url = changeInfo.url;
+        await putMirror(mirror);
+        // Autosave only on a real page change, not query-string noise.
+        if (oldKey !== pathKey(changeInfo.url)) scheduleAutoSnapshot();
+      } else {
+        scheduleAutoSnapshot();
+      }
     }
   }, "updated");
 });
+
+// A real unpin (tab still alive after the grace) dissolves its group:
+// the unpinned tab stays as a regular tab, its copies elsewhere close.
+function scheduleUnpinConfirm(tabId) {
+  setTimeout(() => {
+    enqueue(async () => {
+      const settings = await getSettings();
+      if (!settings.mirrorPinned) return;
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (!tab || tab.pinned) return; // closed (handled by onRemoved) or re-pinned
+      const mirror = await getMirror();
+      const gid = groupOfTab(mirror, tabId);
+      if (!gid) return;
+      await dissolveGroup(mirror, gid, tabId);
+      await putMirror(mirror);
+      scheduleAutoSnapshot();
+    }, "unpin-confirm");
+  }, UNPIN_CONFIRM_MS);
+}
 
 // Prerender/instant pages swap tab ids; carry the state over.
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
@@ -315,50 +536,105 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     const state = await getTabState(removedTabId);
     await dropTabState(removedTabId);
     if (state) await putTabState(addedTabId, state);
+    const mirror = await getMirror();
+    const gid = groupOfTab(mirror, removedTabId);
+    if (gid) {
+      for (const [win, memberId] of Object.entries(mirror.groups[gid].members)) {
+        if (memberId === removedTabId) mirror.groups[gid].members[win] = addedTabId;
+      }
+      await putMirror(mirror);
+    }
   }, "replaced");
 });
 
-// --- the restore net --------------------------------------------------------
+// --- the restore net + mirrored close ----------------------------------------
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   enqueue(async () => {
     const state = await getTabState(tabId);
     await dropTabState(tabId);
-    traceDiag(`removed tab=${tabId} winClosing=${removeInfo.isWindowClosing} state=${JSON.stringify(state)}`);
-    if (!state) return;
+    traceDiag(
+      `removed tab=${tabId} winClosing=${removeInfo.isWindowClosing} state=${JSON.stringify(state)}`,
+    );
+
+    const settings = await getSettings();
+    const mirror = await getMirror();
+    const gid = groupOfTab(mirror, tabId);
+    if (gid) {
+      for (const [win, memberId] of Object.entries(mirror.groups[gid].members)) {
+        if (memberId === tabId) delete mirror.groups[gid].members[win];
+      }
+    }
+
+    const finishMirror = async () => {
+      if (gid && mirror.groups[gid] && Object.keys(mirror.groups[gid].members).length === 0) {
+        delete mirror.groups[gid];
+        mirror.order = mirror.order.filter((g) => g !== gid);
+      }
+      await putMirror(mirror);
+    };
+
+    // Closed by the extension itself: no restore, no propagation.
+    if (await wasSelfClosed(tabId)) {
+      await finishMirror();
+      return;
+    }
+
+    if (!state) {
+      await finishMirror();
+      return;
+    }
     if (state.pinned || state.protected) scheduleAutoSnapshot();
-    // Closed by the extension itself (snapshot restore): never bring back.
-    if (await wasSelfClosed(tabId)) return;
+
+    // Whole window closing: its copies die with it, siblings elsewhere and
+    // the group survive; autosaves keep the set restorable either way.
+    if (removeInfo.isWindowClosing) {
+      await finishMirror();
+      return;
+    }
+
     // A protection drop caused by an unpin milliseconds ago is Chrome's own
     // unpin-on-close, not a user decision - the tab still counts as protected.
     const closeUnpinGrace =
       !state.protected &&
       state.unpinnedAt &&
       Date.now() - state.unpinnedAt < CLOSE_UNPIN_GRACE_MS;
-    if (!state.protected && !closeUnpinGrace) return;
-    // Whole window closing is a deliberate act; Cmd+Shift+T brings it back
-    // (and the auto-snapshot keeps the pinned set restorable from the popup).
-    if (removeInfo.isWindowClosing) return;
-    // The page had user activation, so Chrome showed the confirmation
-    // dialog and the user chose to leave. Respect that.
-    if (state.activated) return;
 
-    const settings = await getSettings();
-    if (!settings.restoreClosed) return;
+    const guarded = state.protected || closeUnpinGrace;
 
-    const url = state.url || "";
-    const now = Date.now();
-    const { recentRestores = {} } = await chrome.storage.session.get("recentRestores");
-    for (const [markedUrl, ts] of Object.entries(recentRestores)) {
-      if (now - ts > RESTORE_MARKS_TTL_MS) delete recentRestores[markedUrl];
+    // Decide whether this close gets undone by the restore net.
+    let willRestore = false;
+    let restoreUrl = state.url || "";
+    if (guarded && !state.activated && settings.restoreClosed) {
+      const now = Date.now();
+      const { recentRestores = {} } = await chrome.storage.session.get("recentRestores");
+      for (const [markedUrl, ts] of Object.entries(recentRestores)) {
+        if (now - ts > RESTORE_MARKS_TTL_MS) delete recentRestores[markedUrl];
+      }
+      if (
+        recentRestores[restoreUrl] &&
+        now - recentRestores[restoreUrl] < settings.restoreCooldownSec * 1000
+      ) {
+        // Closed again right after a restore: deliberate, let it go.
+        await chrome.storage.session.set({ recentRestores });
+      } else {
+        recentRestores[restoreUrl] = now;
+        await chrome.storage.session.set({ recentRestores });
+        willRestore = true;
+      }
     }
-    if (recentRestores[url] && now - recentRestores[url] < settings.restoreCooldownSec * 1000) {
-      // Closed again right after a restore: deliberate, let it go.
-      await chrome.storage.session.set({ recentRestores });
+
+    if (willRestore) {
+      // Group stays; the restored tab re-adopts it by page identity.
+      await finishMirror();
+      await restoreTab(restoreUrl, settings);
       return;
     }
-    recentRestores[url] = now;
-    await chrome.storage.session.set({ recentRestores });
-    await restoreTab(url, settings);
+
+    // Deliberate close of a pinned tab: mirror it to the other windows.
+    if (gid && (state.pinned || closeUnpinGrace) && settings.mirrorPinned) {
+      await dissolveGroup(mirror, gid, null);
+    }
+    await finishMirror();
   }, "removed");
 });
 
@@ -386,17 +662,236 @@ async function restoreTab(url, settings) {
 }
 
 function notifyRestored(settings) {
-  chrome.notifications
-    .create({
-      type: "basic",
-      iconUrl: "icons/locked-128.png",
-      title: "TruePin: вкладка восстановлена",
-      message:
-        "Защищённая вкладка была закрыта без подтверждения - вернул её на место. " +
-        `Закрыть насовсем: закрой её ещё раз в течение ${settings.restoreCooldownSec} с, ` +
-        "сними закрепление или выключи замок в попапе расширения.",
-    })
-    .catch(() => {});
+  ensureI18n().then(() => {
+    chrome.notifications
+      .create({
+        type: "basic",
+        iconUrl: "icons/locked-128.png",
+        title: tpI18n.t("notifTitle"),
+        message: tpI18n.t("notifMsg", [settings.restoreCooldownSec]),
+      })
+      .catch(() => {});
+  });
+}
+
+// --- window lifecycle ---------------------------------------------------------
+async function rememberFocus(windowId) {
+  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+  const next = [windowId, ...focusStack.filter((id) => id !== windowId)].slice(0, 10);
+  await chrome.storage.session.set({ focusStack: next });
+}
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  enqueue(() => rememberFocus(windowId), "focus");
+});
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  enqueue(async () => {
+    const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+    await chrome.storage.session.set({ focusStack: focusStack.filter((id) => id !== windowId) });
+  }, "window-removed");
+});
+
+// Every new normal window gets a copy of each pinned group.
+chrome.windows.onCreated.addListener((win) => {
+  enqueue(async () => {
+    const settings = await getSettings();
+    if (!settings.mirrorPinned) return;
+    if (!win || win.type !== "normal" || win.incognito) return;
+    // Let the window's own tabs appear first (session restore, dragged tab,
+    // "open in new window") - syncWindowFill adopts them before filling gaps.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const tabs = await chrome.tabs.query({ windowId: win.id }).catch(() => []);
+      if (tabs.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    await syncWindowFill(win.id, settings);
+  }, "window-created");
+});
+
+// --- snapshots -----------------------------------------------------------------
+function snapshotFromTabs(tabs) {
+  return {
+    urls: tabs.map((t) => tabUrl(t)),
+    titles: tabs.map((t) => t.title || ""),
+    keys: tabs.map((t) => pathKey(tabUrl(t))),
+    savedAt: Date.now(),
+  };
+}
+
+const pinnedTabsOf = (windowId) => chrome.tabs.query({ windowId, pinned: true });
+
+// The window whose pinned set represents "the" set: most recently focused
+// normal window that has pinned tabs (they are mirrored anyway).
+async function pinnedHomeWindow() {
+  const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  const withPins = new Set();
+  for (const w of windows) {
+    if (w.incognito) continue;
+    if ((w.tabs || []).some((t) => t.pinned)) withPins.add(w.id);
+  }
+  if (!withPins.size) return null;
+  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
+  for (const id of focusStack) {
+    if (withPins.has(id)) return id;
+  }
+  return withPins.values().next().value;
+}
+
+async function getAutoSnaps() {
+  const { [AUTO_SNAPS_KEY]: ring = [] } = await chrome.storage.local.get(AUTO_SNAPS_KEY);
+  return ring;
+}
+
+// Ring of the last N pinned sets. A new entry appears only when the set
+// changes structurally: membership or a page change (query/hash ignored).
+let autoSnapTimer = null;
+function scheduleAutoSnapshot() {
+  clearTimeout(autoSnapTimer);
+  autoSnapTimer = setTimeout(() => {
+    enqueue(writeAutoSnapshot, "auto-snapshot");
+  }, AUTO_SNAP_DEBOUNCE_MS);
+}
+
+async function writeAutoSnapshot() {
+  const settings = await getSettings();
+  if (!settings.autoSnapshot) return;
+  const homeId = await pinnedHomeWindow();
+  if (homeId === null) return; // no pinned tabs anywhere: keep history as is
+  const pinned = await pinnedTabsOf(homeId);
+  if (!pinned.length) return;
+  const snap = snapshotFromTabs(pinned);
+  const ring = await getAutoSnaps();
+  const signature = snap.keys.join("\n");
+  if (ring[0] && (ring[0].keys || []).join("\n") === signature) return;
+  ring.unshift(snap);
+  await chrome.storage.local.set({ [AUTO_SNAPS_KEY]: ring.slice(0, AUTO_SNAPS_MAX) });
+}
+
+async function listSnapshots() {
+  const all = await chrome.storage.sync.get(null);
+  return Object.entries(all)
+    .filter(([key]) => key.startsWith(SNAP_PREFIX))
+    .map(([key, value]) => ({
+      name: key.slice(SNAP_PREFIX.length),
+      count: (value.urls || []).length,
+      savedAt: value.savedAt || 0,
+    }))
+    .sort((a, b) => b.savedAt - a.savedAt);
+}
+
+async function saveSnapshot(name, windowId) {
+  const pinned = await pinnedTabsOf(windowId);
+  if (!pinned.length) return { error: "noPinned" };
+  const clean = String(name || "").trim().slice(0, 40);
+  if (!clean) return { error: "statusNameEmpty" };
+  await chrome.storage.sync.set({ [SNAP_PREFIX + clean]: snapshotFromTabs(pinned) });
+  return { ok: true };
+}
+
+async function deleteSnapshot(name) {
+  await chrome.storage.sync.remove(SNAP_PREFIX + name);
+  return { ok: true };
+}
+
+// Make `urls` the pinned set: diff-apply in the authoritative window (reuse
+// matching tabs in place, create missing, close extras), then rebuild the
+// groups from it and sync every other window the same way.
+async function applyCanonicalSet(urls, authWindowId, settings) {
+  // The set being replaced becomes an autosave entry (undo path).
+  await writeAutoSnapshot();
+
+  const stats = await diffApplyWindow(urls, authWindowId, true);
+
+  // Rebuild groups from the authoritative window.
+  const authPinned = await pinnedTabsOf(authWindowId);
+  const mirror = await getMirror();
+  mirror.groups = {};
+  mirror.order = [];
+  mirror.pending = [];
+  for (const tab of authPinned) {
+    const gid = await nextGid();
+    mirror.groups[gid] = { url: tabUrl(tab), members: { [authWindowId]: tab.id } };
+    mirror.order.push(gid);
+  }
+  await putMirror(mirror);
+
+  if (settings.mirrorPinned) {
+    for (const w of await normalWindows()) {
+      if (w.id === authWindowId) continue;
+      await diffApplyWindow(urls, w.id, true);
+      // Bind the resulting tabs to the rebuilt groups.
+      const tabs = await pinnedTabsOf(w.id);
+      const fresh = await getMirror();
+      for (const tab of tabs) {
+        const gid = fresh.order.find(
+          (g) =>
+            fresh.groups[g].members[w.id] === undefined &&
+            pathKey(fresh.groups[g].url) === pathKey(tabUrl(tab)),
+        );
+        if (gid) fresh.groups[gid].members[w.id] = tab.id;
+      }
+      await putMirror(fresh);
+    }
+  }
+  scheduleAutoSnapshot();
+  return stats;
+}
+
+// Diff one window's pinned tabs against the target list of urls.
+async function diffApplyWindow(urls, windowId, closeExtras) {
+  const current = await pinnedTabsOf(windowId);
+  const used = new Set();
+  let reused = 0;
+  let created = 0;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const match =
+      current.find((t) => !used.has(t.id) && tabUrl(t) === url) ||
+      current.find((t) => !used.has(t.id) && pathKey(tabUrl(t)) === pathKey(url));
+    if (match) {
+      used.add(match.id);
+      reused++;
+      if (match.index !== i) {
+        await chrome.tabs.move(match.id, { index: i }).catch(() => {});
+      }
+    } else {
+      try {
+        const tab = await chrome.tabs.create({ windowId, url, pinned: true, index: i, active: false });
+        used.add(tab.id);
+        created++;
+      } catch (err) {
+        traceDiag(`diffApply: create failed for ${url}: ${err && err.message}`);
+      }
+    }
+  }
+  let closed = 0;
+  if (closeExtras) {
+    const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
+    if (extras.length) {
+      await markSelfClosed(extras);
+      await chrome.tabs.remove(extras).catch(() => {});
+      closed = extras.length;
+    }
+  }
+  return { reused, created, closed };
+}
+
+async function restoreSnapshot(request, windowId, settings) {
+  let snap;
+  if (request.autoIndex !== undefined) {
+    const ring = await getAutoSnaps();
+    snap = ring[request.autoIndex];
+  } else {
+    ({ [SNAP_PREFIX + request.name]: snap } = await chrome.storage.sync.get(
+      SNAP_PREFIX + request.name,
+    ));
+  }
+  if (!snap || !(snap.urls || []).length) return { error: "noSnaps" };
+  const stats = await applyCanonicalSet(snap.urls, windowId, settings);
+  traceDiag(`restoreSnapshot: ${JSON.stringify(stats)}`);
+  return { ok: true, ...stats };
 }
 
 // --- manual lock toggle ------------------------------------------------------
@@ -420,203 +915,11 @@ globalThis.truePinToggle = async (tabId) => {
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
 
-// --- window focus tracking ---------------------------------------------------
-async function rememberFocus(windowId) {
-  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
-  const next = [windowId, ...focusStack.filter((id) => id !== windowId)].slice(0, 10);
-  await chrome.storage.session.set({ focusStack: next });
-}
-
-chrome.windows.onFocusChanged.addListener((windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
-  enqueue(() => rememberFocus(windowId), "focus");
-});
-
-chrome.windows.onRemoved.addListener((windowId) => {
-  enqueue(async () => {
-    const { focusStack = [] } = await chrome.storage.session.get("focusStack");
-    await chrome.storage.session.set({ focusStack: focusStack.filter((id) => id !== windowId) });
-  }, "window-removed");
-});
-
-// --- follow mode: pinned tabs move into a genuinely new window ----------------
-chrome.windows.onCreated.addListener((win) => {
-  enqueue(() => followIntoWindow(win), "window-created");
-});
-
-async function followIntoWindow(win) {
-  const settings = await getSettings();
-  if (!settings.followNewWindow) return;
-  if (!win || win.type !== "normal" || win.incognito) return;
-
-  // A genuinely new window (Cmd+N) has exactly one tab on an empty page.
-  // Windows born from dragging a tab out, "open link in new window",
-  // session restore or OAuth popups all fail this check and keep their tabs.
-  let tabs = [];
-  for (let attempt = 0; attempt < 6; attempt++) {
-    tabs = await chrome.tabs.query({ windowId: win.id }).catch(() => []);
-    if (tabs.length > 0) break;
-    await new Promise((resolve) => setTimeout(resolve, 120));
-  }
-  if (tabs.length !== 1) return;
-  const url = tabUrl(tabs[0]);
-  if (url && !NEW_TAB_URLS.test(url)) return;
-
-  const donorId = await findDonorWindow(win.id);
-  if (donorId === null) return;
-  const pinned = await chrome.tabs.query({ windowId: donorId, pinned: true });
-  if (!pinned.length) return;
-
-  traceDiag(`follow: moving ${pinned.length} pinned from win=${donorId} to win=${win.id}`);
-  for (let i = 0; i < pinned.length; i++) {
-    try {
-      // Cross-window move drops the pin; re-pin right away. No onRemoved
-      // fires for moves, and the unpin grace keeps protection continuous.
-      await chrome.tabs.move(pinned[i].id, { windowId: win.id, index: i });
-      await chrome.tabs.update(pinned[i].id, { pinned: true });
-    } catch (err) {
-      traceDiag(`follow: move failed for tab=${pinned[i].id}: ${err && err.message}`);
-    }
-  }
-}
-
-// The most recently focused normal window (excluding the given one) that has
-// pinned tabs; also serves as "the" pinned-home window for auto-snapshots.
-async function findDonorWindow(excludeWindowId) {
-  const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal"] });
-  const withPins = new Set();
-  for (const w of windows) {
-    if (w.id === excludeWindowId || w.incognito) continue;
-    if ((w.tabs || []).some((t) => t.pinned)) withPins.add(w.id);
-  }
-  if (!withPins.size) return null;
-  const { focusStack = [] } = await chrome.storage.session.get("focusStack");
-  for (const id of focusStack) {
-    if (withPins.has(id)) return id;
-  }
-  return withPins.values().next().value;
-}
-
-// --- snapshots -----------------------------------------------------------------
-function snapshotFromTabs(tabs) {
-  return {
-    urls: tabs.map((t) => tabUrl(t)),
-    titles: tabs.map((t) => t.title || ""),
-    savedAt: Date.now(),
-  };
-}
-
-const pinnedTabsOf = (windowId) => chrome.tabs.query({ windowId, pinned: true });
-
-async function listSnapshots() {
-  const all = await chrome.storage.sync.get(null);
-  const named = Object.entries(all)
-    .filter(([key]) => key.startsWith(SNAP_PREFIX))
-    .map(([key, value]) => ({
-      name: key.slice(SNAP_PREFIX.length),
-      count: (value.urls || []).length,
-      savedAt: value.savedAt || 0,
-      auto: false,
-    }))
-    .sort((a, b) => b.savedAt - a.savedAt);
-  const { [AUTO_SNAP_KEY]: auto } = await chrome.storage.local.get(AUTO_SNAP_KEY);
-  const result = [];
-  if (auto && (auto.urls || []).length) {
-    result.push({ name: "Авто", count: auto.urls.length, savedAt: auto.savedAt || 0, auto: true });
-  }
-  return result.concat(named);
-}
-
-// Rolling safety net: the last non-empty pinned set. Never overwritten with
-// an empty set, so "closed the window with all my pins" stays recoverable.
-let autoSnapTimer = null;
-function scheduleAutoSnapshot() {
-  clearTimeout(autoSnapTimer);
-  autoSnapTimer = setTimeout(() => {
-    enqueue(writeAutoSnapshot, "auto-snapshot");
-  }, AUTO_SNAP_DEBOUNCE_MS);
-}
-
-async function writeAutoSnapshot() {
-  const settings = await getSettings();
-  if (!settings.autoSnapshot) return;
-  const homeId = await findDonorWindow(chrome.windows.WINDOW_ID_NONE);
-  if (homeId === null) return; // no pinned tabs anywhere: keep the last set
-  const pinned = await pinnedTabsOf(homeId);
-  if (!pinned.length) return;
-  const snap = snapshotFromTabs(pinned);
-  const { [AUTO_SNAP_KEY]: prev } = await chrome.storage.local.get(AUTO_SNAP_KEY);
-  if (prev && prev.urls && prev.urls.join("\n") === snap.urls.join("\n")) return;
-  await chrome.storage.local.set({ [AUTO_SNAP_KEY]: snap });
-}
-
-async function saveSnapshot(name, windowId) {
-  const pinned = await pinnedTabsOf(windowId);
-  if (!pinned.length) return { error: "Нет закреплённых вкладок" };
-  const clean = String(name || "").trim().slice(0, 40);
-  if (!clean) return { error: "Пустое имя" };
-  await chrome.storage.sync.set({ [SNAP_PREFIX + clean]: snapshotFromTabs(pinned) });
-  return { ok: true };
-}
-
-async function deleteSnapshot(name) {
-  await chrome.storage.sync.remove(SNAP_PREFIX + name);
-  return { ok: true };
-}
-
-// Diff-restore: reuse matching pinned tabs in place (no reload), create the
-// missing ones, close the extras. The set being replaced is written to the
-// auto-snapshot first, so a restore is always undoable from "Авто".
-async function restoreSnapshot({ name, auto }, windowId) {
-  let snap;
-  if (auto) {
-    ({ [AUTO_SNAP_KEY]: snap } = await chrome.storage.local.get(AUTO_SNAP_KEY));
-  } else {
-    ({ [SNAP_PREFIX + name]: snap } = await chrome.storage.sync.get(SNAP_PREFIX + name));
-  }
-  if (!snap || !(snap.urls || []).length) return { error: "Набор пуст или не найден" };
-
-  const current = await pinnedTabsOf(windowId);
-  if (current.length && !auto) {
-    await chrome.storage.local.set({ [AUTO_SNAP_KEY]: snapshotFromTabs(current) });
-  }
-
-  const used = new Set();
-  let reused = 0;
-  let created = 0;
-  for (let i = 0; i < snap.urls.length; i++) {
-    const url = snap.urls[i];
-    const match = current.find((t) => !used.has(t.id) && tabUrl(t) === url);
-    if (match) {
-      used.add(match.id);
-      reused++;
-      if (match.index !== i) {
-        await chrome.tabs.move(match.id, { index: i }).catch(() => {});
-      }
-    } else {
-      try {
-        const tab = await chrome.tabs.create({ windowId, url, pinned: true, index: i, active: false });
-        used.add(tab.id);
-        created++;
-      } catch (err) {
-        traceDiag(`restoreSnapshot: create failed for ${url}: ${err && err.message}`);
-      }
-    }
-  }
-  const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
-  if (extras.length) {
-    await markSelfClosed(extras);
-    await chrome.tabs.remove(extras).catch(() => {});
-  }
-  traceDiag(`restoreSnapshot: reused=${reused} created=${created} closed=${extras.length}`);
-  return { ok: true, reused, created, closed: extras.length };
-}
-
 // --- popup UI backend -----------------------------------------------------------
 async function handleUi(request) {
+  const settings = await getSettings();
   switch (request.type) {
     case "ui:getState": {
-      const settings = await getSettings();
       const pinned = await pinnedTabsOf(request.windowId);
       let active = null;
       if (request.tabId !== undefined) {
@@ -631,16 +934,22 @@ async function handleUi(request) {
           };
         }
       }
+      const ring = await getAutoSnaps();
       return {
         pinned: pinned.map((t) => ({ id: t.id, title: t.title || tabUrl(t), url: tabUrl(t) })),
         active,
         snapshots: await listSnapshots(),
+        autoSnaps: ring.map((snap, index) => ({
+          index,
+          count: (snap.urls || []).length,
+          savedAt: snap.savedAt || 0,
+        })),
         settings,
       };
     }
     case "ui:toggle": {
       const tab = await chrome.tabs.get(request.tabId).catch(() => null);
-      if (!tab) return { error: "Вкладка не найдена" };
+      if (!tab) return { error: "hintPlain" };
       const state = await toggleTab(tab);
       return { ok: true, protected: state.protected };
     }
@@ -649,7 +958,7 @@ async function handleUi(request) {
     case "ui:deleteSnapshot":
       return deleteSnapshot(request.name);
     case "ui:restoreSnapshot":
-      return restoreSnapshot({ name: request.name, auto: request.auto }, request.windowId);
+      return restoreSnapshot(request, request.windowId, settings);
     default:
       return { error: `unknown ${request.type}` };
   }

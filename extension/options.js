@@ -4,21 +4,37 @@ const DEFAULTS = {
   showIcon: true,
   restoreClosed: true,
   restoreCooldownSec: 15,
-  followNewWindow: true,
+  mirrorPinned: true,
   autoSnapshot: true,
+  language: "auto",
 };
 const FIELDS = Object.keys(DEFAULTS);
+
+function fieldKind(field) {
+  const def = DEFAULTS[field];
+  if (typeof def === "boolean") return "bool";
+  if (typeof def === "number") return "num";
+  return "str";
+}
+
+async function localize() {
+  const { settings } = await chrome.storage.sync.get("settings");
+  await tpI18n.init((settings && settings.language) || "auto");
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    el.textContent = tpI18n.t(el.dataset.i18n);
+  }
+  document.title = tpI18n.t("optSettingsTitle");
+  document.querySelector('#language option[value="auto"]').textContent = tpI18n.t("langAuto");
+}
 
 async function load() {
   const { settings } = await chrome.storage.sync.get("settings");
   const merged = { ...DEFAULTS, ...(settings || {}) };
   for (const field of FIELDS) {
     const el = document.getElementById(field);
-    if (typeof DEFAULTS[field] === "boolean") {
-      el.checked = !!merged[field];
-    } else {
-      el.value = merged[field];
-    }
+    const kind = fieldKind(field);
+    if (kind === "bool") el.checked = !!merged[field];
+    else el.value = merged[field];
   }
 }
 
@@ -28,16 +44,21 @@ async function save() {
   const settings = {};
   for (const field of FIELDS) {
     const el = document.getElementById(field);
-    if (typeof DEFAULTS[field] === "boolean") {
+    const kind = fieldKind(field);
+    if (kind === "bool") {
       settings[field] = el.checked;
-    } else {
+    } else if (kind === "num") {
       const value = Number(el.value);
-      settings[field] = Number.isFinite(value) && value > 0
-        ? Math.max(3, Math.min(120, Math.round(value)))
-        : DEFAULTS[field];
+      settings[field] =
+        Number.isFinite(value) && value > 0
+          ? Math.max(3, Math.min(120, Math.round(value)))
+          : DEFAULTS[field];
+    } else {
+      settings[field] = el.value;
     }
   }
   await chrome.storage.sync.set({ settings });
+  await localize(); // language may have changed
   const saved = document.getElementById("saved");
   saved.style.visibility = "visible";
   clearTimeout(savedTimer);
@@ -49,4 +70,4 @@ async function save() {
 for (const field of FIELDS) {
   document.getElementById(field).addEventListener("change", save);
 }
-load();
+localize().then(load);

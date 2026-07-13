@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Onglets épinglés, bien faits : confirmation de fermeture, restauration automatique des onglets fermés silencieusement, miroir dans toutes les fenêtres et ensembles."
+  },
+  "actionProtected": {
+    "message": "TruePin : onglet protégé"
+  },
+  "actionUnprotected": {
+    "message": "TruePin : non protégé"
+  },
+  "notifTitle": {
+    "message": "TruePin : onglet restauré"
+  },
+  "notifMsg": {
+    "message": "Un onglet protégé a été fermé sans confirmation, il a donc été restauré. Pour le fermer définitivement : fermez-le à nouveau dans les $1 s, désépinglez-le ou désactivez le verrou dans la fenêtre."
+  },
+  "popupLockLabel": {
+    "message": "Verrouiller cet onglet"
+  },
+  "hintProtectedPinned": {
+    "message": "Protégé (épinglé)"
+  },
+  "hintProtectedManual": {
+    "message": "Protégé manuellement"
+  },
+  "hintAutoOff": {
+    "message": "La protection auto des onglets épinglés est désactivée"
+  },
+  "hintPlain": {
+    "message": "Onglet ordinaire"
+  },
+  "pinnedHeader": {
+    "message": "Épinglés"
+  },
+  "noPinned": {
+    "message": "Aucun onglet épinglé"
+  },
+  "snapNamePlaceholder": {
+    "message": "Nom de l'ensemble (ex. Travail)"
+  },
+  "saveBtn": {
+    "message": "Enregistrer"
+  },
+  "updateBtn": {
+    "message": "Mettre à jour"
+  },
+  "snapsHeader": {
+    "message": "Ensembles"
+  },
+  "noSnaps": {
+    "message": "Aucun ensemble pour l'instant - enregistrez l'actuel."
+  },
+  "autoHeader": {
+    "message": "Sauvegardes auto"
+  },
+  "noAutoSnaps": {
+    "message": "Rien pour l'instant"
+  },
+  "restoreBtn": {
+    "message": "Restaurer"
+  },
+  "deleteTitle": {
+    "message": "Supprimer l'ensemble"
+  },
+  "confirmDelete": {
+    "message": "sûr ?"
+  },
+  "statusNameEmpty": {
+    "message": "Donnez un nom à l'ensemble"
+  },
+  "statusSaved": {
+    "message": "Ensemble « $1 » enregistré ($2)"
+  },
+  "statusDeleted": {
+    "message": "Ensemble « $1 » supprimé"
+  },
+  "statusRestored": {
+    "message": "Restauré : $1 ouverts, $2 en place, $3 fermés"
+  },
+  "statusUndo": {
+    "message": "L'ensemble précédent est dans les sauvegardes auto"
+  },
+  "relNow": {
+    "message": "à l'instant"
+  },
+  "relMin": {
+    "message": "il y a $1 min"
+  },
+  "relHours": {
+    "message": "il y a $1 h"
+  },
+  "tabs_one": {
+    "message": "$1 onglet"
+  },
+  "tabs_few": {
+    "message": "$1 onglets"
+  },
+  "tabs_many": {
+    "message": "$1 onglets"
+  },
+  "tabs_other": {
+    "message": "$1 onglets"
+  },
+  "optAutoLock": {
+    "message": "Protéger automatiquement les onglets épinglés"
+  },
+  "optAutoLockHint": {
+    "message": "Désépingler retire aussi la protection."
+  },
+  "optShowIcon": {
+    "message": "Ajouter 🔒 au titre d'un onglet protégé"
+  },
+  "optRestoreNet": {
+    "message": "Restaurer un onglet protégé fermé sans confirmation"
+  },
+  "optRestoreNetHint": {
+    "message": "Chrome n'affiche le dialogue « Quitter le site ? » qu'après une interaction avec la page. Si un onglet protégé s'est fermé silencieusement (page intacte, déchargée de la mémoire, chrome://), l'extension le remet en place."
+  },
+  "optCooldownPre": {
+    "message": "Fermer à nouveau dans les"
+  },
+  "optCooldownPost": {
+    "message": "secondes ferme définitivement"
+  },
+  "optMirror": {
+    "message": "Refléter les onglets épinglés dans toutes les fenêtres"
+  },
+  "optMirrorHint": {
+    "message": "Une nouvelle fenêtre reçoit une copie de chaque onglet épinglé ; épingler, désépingler et fermer sont synchronisés entre les fenêtres. La navigation privée n'est pas touchée."
+  },
+  "optAutoSnaps": {
+    "message": "Conserver les sauvegardes auto de l'ensemble (10 dernières)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Enregistré quand un onglet épinglé est ajouté, retiré ou navigue vers une autre page (les changements limités aux paramètres GET sont ignorés). Restaurable depuis la fenêtre - y compris après la fermeture d'une fenêtre entière."
+  },
+  "optLang": {
+    "message": "Langue"
+  },
+  "langAuto": {
+    "message": "Auto (langue du navigateur)"
+  },
+  "saved": {
+    "message": "Enregistré"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - paramètres"
+  },
+  "optionsLink": {
+    "message": "Paramètres"
+  }
+}

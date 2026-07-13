@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Pinned tabs, done right: close confirmation, auto-restore of silently closed pinned tabs, mirroring across windows and snapshots."
+  },
+  "actionProtected": {
+    "message": "TruePin: tab protected"
+  },
+  "actionUnprotected": {
+    "message": "TruePin: not protected"
+  },
+  "notifTitle": {
+    "message": "TruePin: tab restored"
+  },
+  "notifMsg": {
+    "message": "A protected tab was closed without confirmation, so I brought it back. To close it for good: close it again within $1 s, unpin it, or turn the lock off in the popup."
+  },
+  "popupLockLabel": {
+    "message": "Lock this tab"
+  },
+  "hintProtectedPinned": {
+    "message": "Protected (pinned)"
+  },
+  "hintProtectedManual": {
+    "message": "Protected manually"
+  },
+  "hintAutoOff": {
+    "message": "Auto-protection of pinned tabs is off"
+  },
+  "hintPlain": {
+    "message": "Regular tab"
+  },
+  "pinnedHeader": {
+    "message": "Pinned"
+  },
+  "noPinned": {
+    "message": "No pinned tabs"
+  },
+  "snapNamePlaceholder": {
+    "message": "Set name (e.g. Work)"
+  },
+  "saveBtn": {
+    "message": "Save"
+  },
+  "updateBtn": {
+    "message": "Update"
+  },
+  "snapsHeader": {
+    "message": "Sets"
+  },
+  "noSnaps": {
+    "message": "No sets yet - save the current one."
+  },
+  "autoHeader": {
+    "message": "Autosaves"
+  },
+  "noAutoSnaps": {
+    "message": "Nothing here yet"
+  },
+  "restoreBtn": {
+    "message": "Restore"
+  },
+  "deleteTitle": {
+    "message": "Delete set"
+  },
+  "confirmDelete": {
+    "message": "sure?"
+  },
+  "statusNameEmpty": {
+    "message": "Give the set a name"
+  },
+  "statusSaved": {
+    "message": "Set “$1” saved ($2)"
+  },
+  "statusDeleted": {
+    "message": "Set “$1” deleted"
+  },
+  "statusRestored": {
+    "message": "Restored: opened $1, kept $2, closed $3"
+  },
+  "statusUndo": {
+    "message": "The previous set is in Autosaves"
+  },
+  "relNow": {
+    "message": "just now"
+  },
+  "relMin": {
+    "message": "$1 min ago"
+  },
+  "relHours": {
+    "message": "$1 h ago"
+  },
+  "tabs_one": {
+    "message": "$1 tab"
+  },
+  "tabs_few": {
+    "message": "$1 tabs"
+  },
+  "tabs_many": {
+    "message": "$1 tabs"
+  },
+  "tabs_other": {
+    "message": "$1 tabs"
+  },
+  "optAutoLock": {
+    "message": "Automatically protect pinned tabs"
+  },
+  "optAutoLockHint": {
+    "message": "Unpinning also removes the protection."
+  },
+  "optShowIcon": {
+    "message": "Add 🔒 to the title of a protected tab"
+  },
+  "optRestoreNet": {
+    "message": "Restore a protected tab closed without confirmation"
+  },
+  "optRestoreNetHint": {
+    "message": "Chrome shows the “Leave site?” dialog only after you have interacted with the page. If a protected tab closed silently (page untouched, discarded from memory, chrome://) - the extension brings it back."
+  },
+  "optCooldownPre": {
+    "message": "Closing again within"
+  },
+  "optCooldownPost": {
+    "message": "seconds closes for good"
+  },
+  "optMirror": {
+    "message": "Mirror pinned tabs across all windows"
+  },
+  "optMirrorHint": {
+    "message": "A new window gets a copy of every pinned tab; pinning, unpinning and closing are synced across windows. Incognito windows are left alone."
+  },
+  "optAutoSnaps": {
+    "message": "Keep autosaves of the pinned set (last 10)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Saved when a pinned tab is added, removed or navigates to a different page (query-string-only changes are ignored). Restorable from the popup - including after closing a whole window."
+  },
+  "optLang": {
+    "message": "Language"
+  },
+  "langAuto": {
+    "message": "Auto (browser language)"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - settings"
+  },
+  "optionsLink": {
+    "message": "Settings"
+  }
+}

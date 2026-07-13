@@ -1,0 +1,152 @@
+{
+  "appDesc": {
+    "message": "Abas fixadas, do jeito certo: confirmação de fechamento, restauração automática de abas fechadas em silêncio, espelhamento em todas as janelas e conjuntos."
+  },
+  "actionProtected": {
+    "message": "TruePin: aba protegida"
+  },
+  "actionUnprotected": {
+    "message": "TruePin: sem proteção"
+  },
+  "notifTitle": {
+    "message": "TruePin: aba restaurada"
+  },
+  "notifMsg": {
+    "message": "Uma aba protegida foi fechada sem confirmação, então eu a trouxe de volta. Para fechar de vez: feche-a novamente em $1 s, desafixe-a ou desligue o cadeado no popup."
+  },
+  "popupLockLabel": {
+    "message": "Travar esta aba"
+  },
+  "hintProtectedPinned": {
+    "message": "Protegida (fixada)"
+  },
+  "hintProtectedManual": {
+    "message": "Protegida manualmente"
+  },
+  "hintAutoOff": {
+    "message": "A proteção automática de fixadas está desligada"
+  },
+  "hintPlain": {
+    "message": "Aba comum"
+  },
+  "pinnedHeader": {
+    "message": "Fixadas"
+  },
+  "noPinned": {
+    "message": "Nenhuma aba fixada"
+  },
+  "snapNamePlaceholder": {
+    "message": "Nome do conjunto (ex.: Trabalho)"
+  },
+  "saveBtn": {
+    "message": "Salvar"
+  },
+  "updateBtn": {
+    "message": "Atualizar"
+  },
+  "snapsHeader": {
+    "message": "Conjuntos"
+  },
+  "noSnaps": {
+    "message": "Ainda não há conjuntos - salve o atual."
+  },
+  "autoHeader": {
+    "message": "Salvamentos automáticos"
+  },
+  "noAutoSnaps": {
+    "message": "Nada por enquanto"
+  },
+  "restoreBtn": {
+    "message": "Restaurar"
+  },
+  "deleteTitle": {
+    "message": "Excluir conjunto"
+  },
+  "confirmDelete": {
+    "message": "certeza?"
+  },
+  "statusNameEmpty": {
+    "message": "Dê um nome ao conjunto"
+  },
+  "statusSaved": {
+    "message": "Conjunto “$1” salvo ($2)"
+  },
+  "statusDeleted": {
+    "message": "Conjunto “$1” excluído"
+  },
+  "statusRestored": {
+    "message": "Restaurado: $1 abertas, $2 no lugar, $3 fechadas"
+  },
+  "statusUndo": {
+    "message": "O conjunto anterior está nos salvamentos automáticos"
+  },
+  "relNow": {
+    "message": "agora mesmo"
+  },
+  "relMin": {
+    "message": "há $1 min"
+  },
+  "relHours": {
+    "message": "há $1 h"
+  },
+  "tabs_one": {
+    "message": "$1 aba"
+  },
+  "tabs_few": {
+    "message": "$1 abas"
+  },
+  "tabs_many": {
+    "message": "$1 abas"
+  },
+  "tabs_other": {
+    "message": "$1 abas"
+  },
+  "optAutoLock": {
+    "message": "Proteger automaticamente as abas fixadas"
+  },
+  "optAutoLockHint": {
+    "message": "Desafixar também remove a proteção."
+  },
+  "optShowIcon": {
+    "message": "Adicionar 🔒 ao título de uma aba protegida"
+  },
+  "optRestoreNet": {
+    "message": "Restaurar uma aba protegida fechada sem confirmação"
+  },
+  "optRestoreNetHint": {
+    "message": "O Chrome mostra o diálogo “Sair do site?” apenas após interação com a página. Se uma aba protegida fechou em silêncio (página intocada, descarregada da memória, chrome://), a extensão a traz de volta."
+  },
+  "optCooldownPre": {
+    "message": "Fechar novamente dentro de"
+  },
+  "optCooldownPost": {
+    "message": "segundos fecha de vez"
+  },
+  "optMirror": {
+    "message": "Espelhar as abas fixadas em todas as janelas"
+  },
+  "optMirrorHint": {
+    "message": "Uma nova janela recebe uma cópia de cada aba fixada; fixar, desafixar e fechar são sincronizados entre janelas. Anônimo fica de fora."
+  },
+  "optAutoSnaps": {
+    "message": "Manter salvamentos automáticos do conjunto (últimos 10)"
+  },
+  "optAutoSnapsHint": {
+    "message": "Salvo quando uma aba fixada é adicionada, removida ou navega para outra página (mudanças só de parâmetros GET são ignoradas). Restaurável pelo popup - inclusive após fechar uma janela inteira."
+  },
+  "optLang": {
+    "message": "Idioma"
+  },
+  "langAuto": {
+    "message": "Auto (idioma do navegador)"
+  },
+  "saved": {
+    "message": "Salvo"
+  },
+  "optSettingsTitle": {
+    "message": "TruePin - configurações"
+  },
+  "optionsLink": {
+    "message": "Configurações"
+  }
+}
