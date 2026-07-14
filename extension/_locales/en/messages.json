@@ -197,5 +197,33 @@
   "supportList": {
     "message": "Add me to the SUPPORTERS list",
     "description": "Options: link to get listed in SUPPORTERS.md"
+  },
+  "footerDonate": {
+    "message": "Say thanks",
+    "description": "Tooltip for the popup footer heart button (donateBtn). Honest: TruePin is free; this is a voluntary thank-you, nothing is locked."
+  },
+  "footerReview": {
+    "message": "Rate TruePin",
+    "description": "Tooltip for the popup footer star button (reviewBtn) - opens the Chrome Web Store review page."
+  },
+  "footerTheme": {
+    "message": "Theme",
+    "description": "Tooltip for the popup footer theme button (themeBtn); cycles system/light/dark."
+  },
+  "optTheme": {
+    "message": "Theme",
+    "description": "Label for the theme select on the options page (#theme)."
+  },
+  "themeAuto": {
+    "message": "System",
+    "description": "Theme select option value=auto - follow the OS/browser color scheme (default)."
+  },
+  "themeLight": {
+    "message": "Light",
+    "description": "Theme select option value=light - force the light token set."
+  },
+  "themeDark": {
+    "message": "Dark",
+    "description": "Theme select option value=dark - force the dark token set."
   }
 }

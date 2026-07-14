@@ -197,5 +197,26 @@
   "supportList": {
     "message": "把我加入 SUPPORTERS 名单",
     "description": "Options: link to get listed in SUPPORTERS.md"
+  },
+  "footerDonate": {
+    "message": "说声谢谢"
+  },
+  "footerReview": {
+    "message": "评价 TruePin"
+  },
+  "footerTheme": {
+    "message": "主题"
+  },
+  "optTheme": {
+    "message": "主题"
+  },
+  "themeAuto": {
+    "message": "跟随系统"
+  },
+  "themeLight": {
+    "message": "浅色"
+  },
+  "themeDark": {
+    "message": "深色"
   }
 }

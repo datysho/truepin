@@ -6,9 +6,16 @@ const DEFAULTS = {
   autoSnapshot: true,
   notifyReopen: true,
   iconStyle: "color",
+  theme: "auto",
   language: "auto",
 };
 const FIELDS = Object.keys(DEFAULTS);
+
+// "auto" -> prefers-color-scheme governs; "light"/"dark" force via data-theme.
+function applyTheme(v) {
+  if (v === "light" || v === "dark") document.documentElement.dataset.theme = v;
+  else delete document.documentElement.dataset.theme;
+}
 
 function fieldKind(field) {
   const def = DEFAULTS[field];
@@ -36,6 +43,7 @@ async function load() {
     if (kind === "bool") el.checked = !!merged[field];
     else el.value = merged[field];
   }
+  applyTheme(merged.theme);
 }
 
 let savedTimer = null;
@@ -58,6 +66,7 @@ async function save() {
     }
   }
   await chrome.storage.sync.set({ settings });
+  applyTheme(settings.theme);
   await localize(); // language may have changed
   const saved = document.getElementById("saved");
   saved.style.visibility = "visible";

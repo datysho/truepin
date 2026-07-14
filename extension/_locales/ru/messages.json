@@ -197,5 +197,26 @@
   "supportList": {
     "message": "Добавить меня в список SUPPORTERS",
     "description": "Options: link to get listed in SUPPORTERS.md"
+  },
+  "footerDonate": {
+    "message": "Сказать спасибо"
+  },
+  "footerReview": {
+    "message": "Оценить TruePin"
+  },
+  "footerTheme": {
+    "message": "Тема"
+  },
+  "optTheme": {
+    "message": "Тема"
+  },
+  "themeAuto": {
+    "message": "Как в системе"
+  },
+  "themeLight": {
+    "message": "Светлая"
+  },
+  "themeDark": {
+    "message": "Тёмная"
   }
 }
