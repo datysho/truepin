@@ -55,6 +55,9 @@ After a `git pull` with changes, hit Reload on the extension card. If the reposi
 ## Settings
 Auto-protect pinned tabs (on) - 🔒 in the title (on) - mirror across windows (on) - autosaves (on) - notification on reopen (on) - toolbar icon: color or gray matching the browser UI - language (auto-detect plus manual choice: en, ru, uk, de, fr, es, pt, zh). A manual lock lasts until the browser session ends.
 
+## Support
+TruePin is free and complete - nothing is paywalled, ever. If it saves your tabs daily, Options has a voluntary one-time contribution button (via [ExtensionPay](https://extensionpay.com)). Contributing changes nothing in the extension; the thank-you is your name in [SUPPORTERS.md](SUPPORTERS.md).
+
 ## Honest limits
 - Closing a whole window and Cmd+Q are not undone: those are window-level acts (Cmd+Shift+T brings the window back; the pinned set is also in the autosaves and mirrored in other windows).
 - With auto-protection off, pinned tabs close normally; closing a copy is then synced across windows.
@@ -62,6 +65,7 @@ Auto-protect pinned tabs (on) - 🔒 in the title (on) - mirror across windows (
 
 ## Development
 - `extension/` - MV3: `background.js` (reopen-protection, mirror groups, sets and autosaves), `content.js` (the 🔒 title prefix only), `popup.*` (UI), `options.*`, `i18n.js` + `_locales/` (8 languages), `icons/`.
+- `extension/extpay.js` - the ExtensionPay client, vendored unmodified from the `extpay` npm package (LGPL-3.0). Dormant until `extension/config.js` carries the extension's ExtensionPay id; with an empty id there is no Support UI and no network calls.
 - Tests: `cd test && npm install && npm test` - e2e on puppeteer against a real Chrome for Testing: 26 scenarios (immortality under every close method, repeated closes, the reopen notification, free reload/navigation, the unpin-then-close path, manual lock carried over to the reopened tab, regular tabs untouched, settings, the global toggle from the popup, the state-driven popup lock (real protection, not the title prefix), snapshot diff-restore, autosave triggers, popup rendering incl. long set names, mirroring across three windows, adoption without duplicates, the ephemeral split-view partner rule, the split-view picker rule (never registered, never resurrected, poisoned autosaves sanitized on read), extension reload without duplicates (simulated; the repro test is proven to fail on the old code), mirror off, localization, a clean service worker log). `HEADFUL=1 npm test` to watch.
 - `test/shot.mjs <out.png>` - a popup screenshot with real data (for UI work).
 - Live diagnostics: `chrome://extensions` - service worker - console, the `__tpDiag` object (job queue and a trace of recent events).

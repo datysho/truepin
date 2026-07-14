@@ -71,3 +71,25 @@ for (const field of FIELDS) {
   document.getElementById(field).addEventListener("change", save);
 }
 localize().then(load);
+
+// --- voluntary support (ExtensionPay) ---------------------------------------
+// Dormant until TP_EXTPAY_ID (config.js) is set. Nothing is gated: the
+// contribution is voluntary; the thank-you is a name in SUPPORTERS.md.
+async function initSupport() {
+  if (typeof TP_EXTPAY_ID === "undefined" || !TP_EXTPAY_ID) return;
+  document.getElementById("supportSection").hidden = false;
+  const extpay = ExtPay(TP_EXTPAY_ID);
+  document.getElementById("supportBtn").addEventListener("click", () => {
+    extpay.openPaymentPage();
+  });
+  try {
+    const user = await extpay.getUser();
+    if (user && user.paid) {
+      document.getElementById("supportBtn").hidden = true;
+      document.getElementById("supportThanks").hidden = false;
+    }
+  } catch {
+    // extensionpay.com unreachable - the plain Support button is enough
+  }
+}
+initSupport();

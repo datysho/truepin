@@ -22,6 +22,11 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://extensionpay.com/*"],
+      "js": ["extpay.js"],
+      "run_at": "document_start"
     }
   ],
   "action": {

@@ -177,5 +177,25 @@
   "pinnedProtectedTitle": {
     "message": "Protegida",
     "description": "Tooltip: this pinned tab is protected"
+  },
+  "supportHeader": {
+    "message": "Apoyar TruePin",
+    "description": "Options: header of the voluntary-support section"
+  },
+  "supportHint": {
+    "message": "TruePin es gratis y lo seguirá siendo - nada está bloqueado. Si te resulta útil, puedes apoyar el desarrollo con una aportación voluntaria única. Como agradecimiento, tu nombre entra en la lista SUPPORTERS del repositorio.",
+    "description": "Options: explains the contribution is voluntary, nothing is locked"
+  },
+  "supportBtn": {
+    "message": "Apoyar",
+    "description": "Options: the Support button"
+  },
+  "supportThanks": {
+    "message": "¡Gracias por apoyar el proyecto!",
+    "description": "Options: shown instead of the button once the user has contributed"
+  },
+  "supportList": {
+    "message": "Añadirme a la lista SUPPORTERS",
+    "description": "Options: link to get listed in SUPPORTERS.md"
   }
 }
