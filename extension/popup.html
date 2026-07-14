@@ -77,6 +77,11 @@
       body {
         margin: 0;
         width: 344px;
+        /* Chrome caps the popup at 600px tall; keep the identity header and the
+           action bar pinned while the middle scrolls. */
+        max-height: 600px;
+        display: flex;
+        flex-direction: column;
         font-size: 13px;
         line-height: 1.45;
         background: var(--bg);
@@ -85,8 +90,10 @@
       }
 
       header {
+        flex: none;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 10px;
         padding: 14px 16px 12px;
       }
@@ -99,7 +106,13 @@
         font-weight: 600;
         font-size: 15px;
         letter-spacing: 0.1px;
-        flex: 1;
+      }
+
+      /* The one scroll region: header and the footer bar stay put. */
+      .scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
       }
 
       section {
@@ -189,10 +202,6 @@
         margin: 0;
         padding: 0;
         list-style: none;
-        max-height: 156px;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: var(--border) transparent;
       }
       .tab-list::-webkit-scrollbar {
         width: 8px;
@@ -374,13 +383,15 @@
       }
       .snap .x {
         border: none;
-        width: 28px;
+        min-width: 28px;
         height: 28px;
-        padding: 0;
+        padding: 0 8px;
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 50%;
+        border-radius: 14px;
+        white-space: nowrap;
         color: var(--muted);
         font-weight: 400;
         font-size: 13px;
@@ -438,6 +449,7 @@
 
       /* Bottom action bar: a chrome://settings-style row of icon actions. */
       .action-bar {
+        flex: none;
         display: flex;
         align-items: center;
         justify-content: flex-end;
@@ -487,32 +499,34 @@
       <span class="name">TruePin</span>
     </header>
 
-    <section class="lock-section">
-      <label class="row lock-row">
-        <span class="switch-label" id="lockLabel"></span>
-        <input type="checkbox" id="lockToggle" class="switch" />
-      </label>
-    </section>
+    <div class="scroll">
+      <section class="lock-section">
+        <label class="row lock-row">
+          <span class="switch-label" id="lockLabel"></span>
+          <input type="checkbox" id="lockToggle" class="switch" />
+        </label>
+      </section>
 
-    <section>
-      <h3><span data-i18n="pinnedHeader"></span> <span id="pinCount"></span></h3>
-      <ul class="tab-list" id="pinnedList"></ul>
-      <div class="save-row">
-        <input type="text" id="snapName" data-i18n-placeholder="snapNamePlaceholder" maxlength="40" />
-        <button class="primary" id="saveBtn"></button>
-      </div>
-    </section>
+      <section>
+        <h3><span data-i18n="pinnedHeader"></span> <span id="pinCount"></span></h3>
+        <ul class="tab-list" id="pinnedList"></ul>
+        <div class="save-row">
+          <input type="text" id="snapName" data-i18n-placeholder="snapNamePlaceholder" maxlength="40" />
+          <button class="primary" id="saveBtn"></button>
+        </div>
+      </section>
 
-    <section>
-      <h3 data-i18n="snapsHeader"></h3>
-      <div id="snapList"></div>
-      <details id="autoDetails">
-        <summary><span data-i18n="autoHeader"></span> <span id="autoCount"></span></summary>
-        <div id="autoList"></div>
-      </details>
-    </section>
+      <section>
+        <h3 data-i18n="snapsHeader"></h3>
+        <div id="snapList"></div>
+        <details id="autoDetails">
+          <summary><span data-i18n="autoHeader"></span> <span id="autoCount"></span></summary>
+          <div id="autoList"></div>
+        </details>
+      </section>
 
-    <div id="status"></div>
+      <div id="status"></div>
+    </div>
 
     <footer class="action-bar">
       <button type="button" class="iconbtn" id="donateBtn" data-i18n-title="footerDonate">

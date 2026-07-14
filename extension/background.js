@@ -937,7 +937,20 @@ async function pinnedHomeWindow() {
 
 async function getAutoSnaps() {
   const { [AUTO_SNAPS_KEY]: ring = [] } = await chrome.storage.local.get(AUTO_SNAPS_KEY);
-  return ring.map(sanitizeSnap);
+  // Collapse identical states to a single (newest) entry: an autosave records a
+  // pinned-set state, and the same state can recur (navigate away and back,
+  // restore an earlier set), which used to pile up rows that look the same. The
+  // ring is newest-first, so the first occurrence of each signature wins.
+  const seen = new Set();
+  const out = [];
+  for (const raw of ring) {
+    const snap = sanitizeSnap(raw);
+    const sig = (snap.keys || []).join("\n");
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    out.push(snap);
+  }
+  return out;
 }
 
 // Ring of the last N pinned sets. A new entry appears only when the set
@@ -960,9 +973,12 @@ async function writeAutoSnapshot() {
   const snap = snapshotFromTabs(pinned);
   const ring = await getAutoSnaps();
   const signature = snap.keys.join("\n");
-  if (ring[0] && (ring[0].keys || []).join("\n") === signature) return;
-  ring.unshift(snap);
-  await chrome.storage.local.set({ [AUTO_SNAPS_KEY]: ring.slice(0, AUTO_SNAPS_MAX) });
+  if (ring[0] && (ring[0].keys || []).join("\n") === signature) return; // unchanged since latest
+  // Drop any older copy of this exact state so a recurring set moves to the top
+  // with a fresh time instead of leaving a duplicate row behind.
+  const deduped = ring.filter((s) => (s.keys || []).join("\n") !== signature);
+  deduped.unshift(snap);
+  await chrome.storage.local.set({ [AUTO_SNAPS_KEY]: deduped.slice(0, AUTO_SNAPS_MAX) });
 }
 
 async function listSnapshots() {
