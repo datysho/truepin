@@ -206,10 +206,6 @@
     "message": "Rate TruePin",
     "description": "Tooltip for the popup footer star button (reviewBtn) - opens the Chrome Web Store review page."
   },
-  "footerTheme": {
-    "message": "Theme",
-    "description": "Tooltip for the popup footer theme button (themeBtn); cycles system/light/dark."
-  },
   "optTheme": {
     "message": "Theme",
     "description": "Label for the theme select on the options page (#theme)."

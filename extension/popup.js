@@ -11,8 +11,8 @@ const t = (key, subs) => tpI18n.t(key, subs);
 const send = (message) => chrome.runtime.sendMessage(message);
 
 // Theme: "auto" lets prefers-color-scheme govern; "light"/"dark" force it via a
-// data-theme attribute the CSS overrides key off. Persisted in settings.theme.
-const THEMES = ["auto", "light", "dark"];
+// data-theme attribute the CSS overrides key off. Chosen in Options (System /
+// Light / Dark) and persisted in settings.theme; the popup only applies it.
 function applyTheme(v) {
   if (v === "light" || v === "dark") document.documentElement.dataset.theme = v;
   else delete document.documentElement.dataset.theme;
@@ -20,14 +20,7 @@ function applyTheme(v) {
 
 // Bottom action bar. openOptions keeps its own handler in init(); donate/review
 // stay hidden until their config URLs are set, so there are never dead links.
-function initFooter(settings) {
-  let theme = (settings && settings.theme) || "auto";
-  $("themeBtn").addEventListener("click", async () => {
-    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-    applyTheme(theme);
-    const { settings: s } = await chrome.storage.sync.get("settings");
-    await chrome.storage.sync.set({ settings: { ...(s || {}), theme } });
-  });
+function initFooter() {
   if (typeof TP_PAYPAL_URL === "undefined" || !TP_PAYPAL_URL) {
     $("donateBtn").hidden = true;
   } else {
@@ -270,7 +263,7 @@ async function init() {
   applyTheme((settings && settings.theme) || "auto");
   await tpI18n.init((settings && settings.language) || "auto");
   localizeDom();
-  initFooter(settings);
+  initFooter();
 
   const win = await chrome.windows.getCurrent();
   windowId = win.id;

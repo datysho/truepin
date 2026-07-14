@@ -81,27 +81,11 @@
         margin: 0 auto;
       }
 
-      .page-head {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
-      .page-head img {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-      }
-      h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 500;
-        letter-spacing: 0.1px;
-      }
-
-      /* Settings live on a single tonal Material You card, divided by hairlines. */
+      /* Settings live on a single tonal Material You card, divided by hairlines.
+         Chrome's options dialog already shows the extension name, so the page
+         carries no header of its own. */
       .card {
-        margin-top: 16px;
+        margin-top: 0;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 12px;
@@ -245,11 +229,6 @@
   </head>
   <body>
     <div class="page">
-      <div class="page-head">
-        <img src="icons/locked-32.png" alt="" />
-        <h2>TruePin</h2>
-      </div>
-
       <div class="card">
         <div class="setting">
           <label>
