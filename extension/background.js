@@ -1146,15 +1146,25 @@ async function handleUi(request) {
       }
       const ring = await getAutoSnaps();
       return {
-        pinned: pinned.map((t) => ({
-          id: t.id,
-          title: t.title || tabUrl(t),
-          url: tabUrl(t),
-          split:
-            t.splitViewId !== undefined && t.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE
-              ? t.splitViewId
-              : -1,
-        })),
+        // `protected` is the real per-tab state (same rule as `active`), NOT
+        // the 🔒 title prefix the content script writes: a discarded or
+        // not-yet-scripted pin is genuinely protected but carries no prefix,
+        // so the popup must render the lock from this, not from the title.
+        pinned: await Promise.all(
+          pinned.map(async (t) => {
+            const st = (await getTabState(t.id)) || newTabState(t);
+            return {
+              id: t.id,
+              title: t.title || tabUrl(t),
+              url: tabUrl(t),
+              protected: computeProtected({ ...st, pinned: !!t.pinned, url: tabUrl(t) }, settings),
+              split:
+                t.splitViewId !== undefined && t.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE
+                  ? t.splitViewId
+                  : -1,
+            };
+          }),
+        ),
         active,
         snapshots: await listSnapshots(),
         autoSnaps: ring.map((snap, index) => ({

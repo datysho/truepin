@@ -173,5 +173,9 @@
   "splitTitle": {
     "message": "Разделённый экран",
     "description": "Tooltip: tab is in a split view / set contains split pairs"
+  },
+  "pinnedProtectedTitle": {
+    "message": "Защищена",
+    "description": "Tooltip: this pinned tab is protected"
   }
 }

@@ -173,5 +173,9 @@
   "splitTitle": {
     "message": "Écran partagé",
     "description": "Tooltip: tab is in a split view / set contains split pairs"
+  },
+  "pinnedProtectedTitle": {
+    "message": "Protégé",
+    "description": "Tooltip: this pinned tab is protected"
   }
 }

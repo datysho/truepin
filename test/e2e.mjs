@@ -419,6 +419,62 @@ async function main() {
   const autoRing = () =>
     swEval(async () => (await chrome.storage.local.get("autoSnaps")).autoSnaps || []);
 
+  await test("popup lock is state-driven: ui:getState reports real protected per pin, not the 🔒 title", async () => {
+    // Regression: the popup used to infer each row's lock from the content
+    // script's 🔒 title prefix. A protected pin that was never scripted (a
+    // discarded pin after a browser restart, a restricted page) carries no
+    // prefix, so its lock went missing though protection was fully in force.
+    // getState now returns the real protected flag the popup renders from.
+    step("fresh settings: autoLockPinned on");
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: {
+          autoLockPinned: true,
+          showIcon: true,
+          mirrorPinned: true,
+          autoSnapshot: true,
+          language: "auto",
+        },
+      }),
+    );
+    await sleep(500);
+
+    const a = await openPage("/plock-a");
+    const b = await openPage("/plock-b");
+    step("pin both (auto-protected)");
+    await setPinned(a.tab.id, true);
+    await setPinned(b.tab.id, true);
+    await waitFor(
+      "both protected",
+      async () =>
+        (await tabState(a.tab.id))?.protected === true &&
+        (await tabState(b.tab.id))?.protected === true,
+    );
+    const winId = await swEval(async (id) => (await chrome.tabs.get(id)).windowId, a.tab.id);
+
+    step("manually unlock B");
+    await swEval((id) => globalThis.truePinToggle(id), b.tab.id);
+    await waitFor("B unprotected", async () => (await tabState(b.tab.id))?.protected === false);
+
+    const s = await uiCall({ type: "ui:getState", windowId: winId, tabId: a.tab.id });
+    const rowA = (s.pinned || []).find((t) => (t.url || "").includes("/plock-a"));
+    const rowB = (s.pinned || []).find((t) => (t.url || "").includes("/plock-b"));
+    assert(rowA && rowA.protected === true, `A shows lock (${JSON.stringify(rowA)})`);
+    assert(rowB && rowB.protected === false, `B shows no lock (${JSON.stringify(rowB)})`);
+
+    step("cleanup: unpin both, close");
+    for (const marker of ["/plock-a", "/plock-b"]) {
+      const live = await findTab(marker);
+      if (live) await setPinned(live.id, false);
+    }
+    await sleep(900); // unpin grace + confirm must both pass
+    for (const marker of ["/plock-a", "/plock-b"]) {
+      const live = await findTab(marker);
+      if (live) await removeTab(live.id);
+    }
+    await sleep(500);
+  });
+
   let snapWindowId = null;
   let s1TabId = null;
 

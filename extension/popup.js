@@ -29,6 +29,13 @@ function favicon(url) {
   return u.toString();
 }
 
+// The content script prefixes a protected tab's document.title with this (🔒 +
+// LRM + space). The popup renders its own lock from the real protected state,
+// so strip the prefix here to avoid a doubled lock.
+const LOCK_PREFIX = "\u{1F512}\u200E ";
+const stripLockPrefix = (title) =>
+  title.startsWith(LOCK_PREFIX) ? title.slice(LOCK_PREFIX.length) : title;
+
 function relTime(ts) {
   if (!ts) return "";
   const d = Date.now() - ts;
@@ -113,11 +120,21 @@ function render() {
     const li = document.createElement("li");
     const img = document.createElement("img");
     img.src = favicon(tab.url);
+    li.append(img);
+    // The lock reflects the tab's real protected state, so it shows even on
+    // discarded/not-yet-scripted pins that carry no 🔒 title prefix.
+    if (tab.protected) {
+      const lock = document.createElement("span");
+      lock.className = "lockmark";
+      lock.textContent = "\u{1F512}";
+      lock.title = t("pinnedProtectedTitle");
+      li.append(lock);
+    }
     const span = document.createElement("span");
     span.className = "t";
-    span.textContent = tab.title;
+    span.textContent = stripLockPrefix(tab.title);
     span.title = tab.url;
-    li.append(img, span);
+    li.append(span);
     if (tab.split !== undefined && tab.split !== -1) {
       const mark = document.createElement("span");
       mark.className = "splitmark";
