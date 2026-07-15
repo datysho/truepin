@@ -9,7 +9,7 @@
 <p>
   <img src="https://img.shields.io/badge/Chrome-Manifest_V3-2563eb?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-2563eb?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/version-3.7.6-2563eb?style=flat-square" alt="version 3.7.6">
+  <img src="https://img.shields.io/badge/version-3.7.7-2563eb?style=flat-square" alt="version 3.7.7">
   <img src="https://img.shields.io/badge/network-none-16a34a?style=flat-square" alt="no network requests">
   <img src="https://img.shields.io/badge/languages-8-2563eb?style=flat-square" alt="8 languages">
 </p>
@@ -166,6 +166,7 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - Closing a whole window and Cmd+Q are not undone - those are window-level acts. Cmd+Shift+T brings the window back, and the pinned set is also in the autosaves and mirrored in other windows.
 - With auto-protection off, pinned tabs close normally, and closing a copy is then synced across windows.
 - A reopened tab gets a new tab id; for pages without a `chrome.sessions` entry, the re-create fallback loses the back/forward history (the page and URL survive).
+- The mirror keeps one pin per page per window: a second pin of the exact same page stays a local pin in that window and is not copied to the others. Different pages of the same site are each mirrored normally.
 
 ## Development
 
@@ -179,7 +180,8 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 **Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 33 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, popup windows never filled, locked tabs pulled to the front, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
 
 ```bash
-cd test && npm install && npm test   # HEADFUL=1 npm test to watch
+cd test && npm install && npm test          # HEADFUL=1 npm test to watch
+npm run test:multiply   # fresh-profile regression: duplicates never multiply
 ```
 
 ## License

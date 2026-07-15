@@ -268,6 +268,15 @@ async function normalWindows() {
 // onCreated handler adopt the new tab instead of treating it as a user pin.
 async function createCopy(mirror, gid, windowId, index) {
   const group = mirror.groups[gid];
+  // Never add a duplicate: if this window already holds a pinned tab of the
+  // same app (same origin), a copy would multiply the set across windows.
+  // Adopt a free matching pin if there is one; otherwise skip entirely.
+  const existing = (await quiet(chrome.tabs.query, { windowId, pinned: true })) || [];
+  const twin = existing.find((t) => pathKey(tabUrl(t)) === pathKey(group.url));
+  if (twin) {
+    if (!groupOfTab(mirror, twin.id)) group.members[windowId] = twin.id;
+    return;
+  }
   mirror.pending.push({ windowId, gid, url: group.url });
   const tab = await quiet(chrome.tabs.create, {
     windowId,
@@ -340,6 +349,22 @@ async function registerPinnedTab(tab, settings) {
     await putMirror(mirror);
     return;
   }
+
+  // This window already holds a pin of the same app in a group: a second one
+  // is a redundant duplicate (a leftover cascade copy, or the same app pinned
+  // twice - e.g. a page that navigated to a diverged path). Do NOT spin up a
+  // parallel group and mirror it into every window - that is exactly what
+  // multiplies the set. Leave it as an inert, ungrouped pin.
+  const dupeInWindow = mirror.order.some((gid) => {
+    const g = mirror.groups[gid];
+    return (
+      g &&
+      g.members[tab.windowId] !== undefined &&
+      g.members[tab.windowId] !== tab.id &&
+      pathKey(g.url) === pathKey(url)
+    );
+  });
+  if (dupeInWindow) return;
 
   // New group: user pinned a tab. Mirror it into every other window -
   // ADOPTING an existing matching pin there before ever creating a copy
