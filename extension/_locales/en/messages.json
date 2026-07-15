@@ -65,6 +65,12 @@
   "confirmDelete": {
     "message": "sure?"
   },
+  "statusSavedLocal": {
+    "message": "Set “$1” saved on this device ($2) - too big to sync"
+  },
+  "localOnly": {
+    "message": "this device only"
+  },
   "statusNameEmpty": {
     "message": "Give the set a name"
   },

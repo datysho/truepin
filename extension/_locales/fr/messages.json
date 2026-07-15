@@ -65,6 +65,12 @@
   "confirmDelete": {
     "message": "sûr ?"
   },
+  "statusSavedLocal": {
+    "message": "Ensemble « $1 » enregistré sur cet appareil ($2) - trop volumineux pour la synchronisation"
+  },
+  "localOnly": {
+    "message": "cet appareil uniquement"
+  },
   "statusNameEmpty": {
     "message": "Donnez un nom à l'ensemble"
   },

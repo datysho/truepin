@@ -65,6 +65,12 @@
   "confirmDelete": {
     "message": "точно?"
   },
+  "statusSavedLocal": {
+    "message": "Набір «$1» збережено на цьому пристрої ($2) - завеликий для синхронізації"
+  },
+  "localOnly": {
+    "message": "лише на цьому пристрої"
+  },
   "statusNameEmpty": {
     "message": "Дай набору назву"
   },

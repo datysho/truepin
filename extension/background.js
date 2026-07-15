@@ -981,20 +981,47 @@ async function writeAutoSnapshot() {
   await chrome.storage.local.set({ [AUTO_SNAPS_KEY]: deduped.slice(0, AUTO_SNAPS_MAX) });
 }
 
+// A named set lives in storage.sync so it follows the user across machines
+// (Chrome Sync). Only these fields are read back: restore applies `urls`, the
+// list sorts by `savedAt`, `splits` is kept forward-compat for a Chrome
+// split-view write API. `titles`/`keys` are never read on this path and only
+// burn the 8KB-per-item sync budget, so they are stripped before syncing -
+// which roughly doubles how many tabs fit in one set.
+function syncedSnap(snap) {
+  return {
+    urls: snap.urls || [],
+    splits: snap.splits || [],
+    savedAt: snap.savedAt || Date.now(),
+  };
+}
+
+// Named sets normally live in sync; ones too big for the 8KB item limit fall
+// back to local (see saveSnapshot). The list unions both, newest first, and
+// flags which ones actually travel across devices.
 async function listSnapshots() {
-  const all = await chrome.storage.sync.get(null);
-  return Object.entries(all)
-    .filter(([key]) => key.startsWith(SNAP_PREFIX))
-    .map(([key, value]) => {
+  const [synced, local] = await Promise.all([
+    chrome.storage.sync.get(null),
+    chrome.storage.local.get(null),
+  ]);
+  const rows = new Map(); // name -> row; a synced copy wins over a local one
+  const collect = (bag, isSynced) => {
+    for (const [key, value] of Object.entries(bag)) {
+      if (!key.startsWith(SNAP_PREFIX)) continue;
+      const name = key.slice(SNAP_PREFIX.length);
+      if (rows.has(name)) continue;
       const clean = sanitizeSnap(value);
-      return {
-        name: key.slice(SNAP_PREFIX.length),
+      rows.set(name, {
+        name,
         count: clean.urls.length,
         splits: (clean.splits || []).length,
         savedAt: value.savedAt || 0,
-      };
-    })
-    .sort((a, b) => b.savedAt - a.savedAt);
+        synced: isSynced,
+      });
+    }
+  };
+  collect(synced, true);
+  collect(local, false);
+  return [...rows.values()].sort((a, b) => b.savedAt - a.savedAt);
 }
 
 async function saveSnapshot(name, windowId) {
@@ -1002,12 +1029,25 @@ async function saveSnapshot(name, windowId) {
   if (!pinned.length) return { error: "noPinned" };
   const clean = String(name || "").trim().slice(0, 40);
   if (!clean) return { error: "statusNameEmpty" };
-  await chrome.storage.sync.set({ [SNAP_PREFIX + clean]: snapshotFromTabs(pinned) });
-  return { ok: true };
+  const key = SNAP_PREFIX + clean;
+  const value = syncedSnap(snapshotFromTabs(pinned));
+  try {
+    await chrome.storage.sync.set({ [key]: value });
+    await chrome.storage.local.remove(key); // clear any older too-big copy of this name
+    return { ok: true };
+  } catch {
+    // Sync rejected: item over 8KB, total quota hit, or sync unavailable. Keep
+    // the set on this machine so an explicit save is never lost - it just will
+    // not travel to other devices until it fits.
+    await chrome.storage.local.set({ [key]: value });
+    await chrome.storage.sync.remove(key).catch(() => {}); // drop a stale synced copy
+    return { ok: true, synced: false, count: value.urls.length };
+  }
 }
 
 async function deleteSnapshot(name) {
-  await chrome.storage.sync.remove(SNAP_PREFIX + name);
+  const key = SNAP_PREFIX + name;
+  await Promise.all([chrome.storage.sync.remove(key), chrome.storage.local.remove(key)]);
   return { ok: true };
 }
 
@@ -1111,9 +1151,9 @@ async function restoreSnapshot(request, windowId, settings) {
     const ring = await getAutoSnaps();
     snap = ring[request.autoIndex];
   } else {
-    ({ [SNAP_PREFIX + request.name]: snap } = await chrome.storage.sync.get(
-      SNAP_PREFIX + request.name,
-    ));
+    const key = SNAP_PREFIX + request.name;
+    ({ [key]: snap } = await chrome.storage.sync.get(key));
+    if (!snap) ({ [key]: snap } = await chrome.storage.local.get(key)); // oversized set kept only locally
   }
   if (snap) snap = sanitizeSnap(snap);
   if (!snap || !(snap.urls || []).length) return { error: "noSnaps" };

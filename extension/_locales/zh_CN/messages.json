@@ -65,6 +65,12 @@
   "confirmDelete": {
     "message": "确定？"
   },
+  "statusSavedLocal": {
+    "message": "集合“$1”已保存在此设备（$2）- 太大，无法同步"
+  },
+  "localOnly": {
+    "message": "仅限此设备"
+  },
   "statusNameEmpty": {
     "message": "请给快照集起个名字"
   },

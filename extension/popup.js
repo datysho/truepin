@@ -185,11 +185,12 @@ function render() {
   }
   for (const snap of state.snapshots) {
     const splitMark = snap.splits ? ` · ⧉${snap.splits > 1 ? snap.splits : ""}` : "";
+    const localMark = snap.synced === false ? ` · ${t("localOnly")}` : "";
     snapList.append(
       snapRow({
         label: snap.name,
-        meta: `${tpI18n.tabsCount(snap.count)} · ${relTime(snap.savedAt)}${splitMark}`,
-        metaTitle: snap.splits ? t("splitTitle") : undefined,
+        meta: `${tpI18n.tabsCount(snap.count)} · ${relTime(snap.savedAt)}${splitMark}${localMark}`,
+        metaTitle: snap.synced === false ? t("localOnly") : snap.splits ? t("splitTitle") : undefined,
         onRestore: () => restoreSnap({ name: snap.name }),
         onDelete: async () => {
           await send({ type: "ui:deleteSnapshot", name: snap.name });
@@ -241,7 +242,12 @@ async function saveSnap() {
     setStatus(t(result.error), true);
     return;
   }
-  setStatus(t("statusSaved", [name, tpI18n.tabsCount(state.pinned.length)]));
+  const count = tpI18n.tabsCount(result.count ?? state.pinned.length);
+  setStatus(
+    result.synced === false
+      ? t("statusSavedLocal", [name, count])
+      : t("statusSaved", [name, count]),
+  );
   $("snapName").value = "";
   refresh();
 }

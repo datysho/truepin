@@ -65,6 +65,12 @@
   "confirmDelete": {
     "message": "¿seguro?"
   },
+  "statusSavedLocal": {
+    "message": "Conjunto «$1» guardado en este dispositivo ($2) - demasiado grande para sincronizar"
+  },
+  "localOnly": {
+    "message": "solo en este dispositivo"
+  },
   "statusNameEmpty": {
     "message": "Dale un nombre al conjunto"
   },

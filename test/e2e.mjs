@@ -581,6 +581,57 @@ async function main() {
     );
   });
 
+  await test("saved sets: slim sync payload + oversized sets fall back to local", async () => {
+    step("save 'slim' and inspect the synced payload");
+    const slim = await uiCall({ type: "ui:saveSnapshot", windowId: snapWindowId, name: "slim" });
+    assert(slim.ok && slim.synced !== false, "slim saved to sync");
+    const slimRaw = await swEval(
+      async () => (await chrome.storage.sync.get("snap:slim"))["snap:slim"],
+    );
+    assert(Array.isArray(slimRaw.urls) && slimRaw.urls.length > 0, "sync set keeps urls");
+    assert(
+      slimRaw.titles === undefined && slimRaw.keys === undefined,
+      "sync set drops titles/keys to fit the 8KB item budget",
+    );
+
+    step("force a sync-quota rejection and save 'huge'");
+    await swEval(() => {
+      globalThis.__origSyncSet = chrome.storage.sync.set.bind(chrome.storage.sync);
+      chrome.storage.sync.set = () =>
+        Promise.reject(new Error("QUOTA_BYTES_PER_ITEM quota exceeded"));
+    });
+    const huge = await uiCall({ type: "ui:saveSnapshot", windowId: snapWindowId, name: "huge" });
+    assert(huge.ok && huge.synced === false, "oversized save reported as local-only");
+    const placement = await swEval(async () => ({
+      sync: (await chrome.storage.sync.get("snap:huge"))["snap:huge"] || null,
+      local: (await chrome.storage.local.get("snap:huge"))["snap:huge"] || null,
+    }));
+    assert(
+      !placement.sync && placement.local && placement.local.urls.length > 0,
+      "oversized set lives in local, not sync",
+    );
+
+    step("list flags synced vs local; restore reads the local fallback");
+    const listed = await uiCall({ type: "ui:getState", windowId: snapWindowId });
+    const hugeRow = listed.snapshots.find((s) => s.name === "huge");
+    const slimRow = listed.snapshots.find((s) => s.name === "slim");
+    assert(hugeRow && hugeRow.synced === false, "huge listed as not synced");
+    assert(slimRow && slimRow.synced === true, "slim listed as synced");
+    const restored = await uiCall({
+      type: "ui:restoreSnapshot",
+      windowId: snapWindowId,
+      name: "huge",
+    });
+    assert(restored.ok, "restore reads the local fallback");
+
+    step("cleanup: unpatch sync.set and drop the test sets from both stores");
+    await swEval(() => {
+      chrome.storage.sync.set = globalThis.__origSyncSet;
+    });
+    await uiCall({ type: "ui:deleteSnapshot", name: "huge" });
+    await uiCall({ type: "ui:deleteSnapshot", name: "slim" });
+  });
+
   await test("autosave ring: query-string change ignored, page change recorded", async () => {
     step("make the snapshot window the focused home");
     await swEval(async (wid) => {
