@@ -33,10 +33,6 @@ browsing history, or the contents of any page.
 
 - **Tabs** - to detect pinned tabs, notice when one is closed, reopen it, and
   mirror pinned tabs across your windows.
-- **Scripting / access to all sites (`<all_urls>`)** - a pinned tab can be on
-  any website, so TruePin must be able to act on all sites to protect them. It
-  only needs to know whether a tab is pinned and its address; it does not read
-  page content and sends nothing anywhere.
 - **Storage** - to save your settings, autosaves, and named sets as described.
 - **Sessions** - to silently reopen a protected tab that was just closed.
 - **Notifications** - to optionally tell you when a protected tab was brought

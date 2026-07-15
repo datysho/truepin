@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "固定标签页的正确打开方式：关闭确认、静默关闭后自动恢复、多窗口镜像与快照集。"
+    "message": "固定标签页，恰到好处：意外关闭立即撤销，跨窗口镜像，命名集合保存并同步。"
   },
   "actionProtected": {
     "message": "TruePin：标签页已保护"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin：未保护"
   },
-  "notifTitle": {
-    "message": "TruePin：标签页已恢复"
-  },
-  "notifMsg": {
-    "message": "受保护的标签页在未确认的情况下被关闭，已自动恢复。要彻底关闭：请在 $1 秒内再次关闭、取消固定，或在弹窗中关闭锁定。"
-  },
   "popupLockLabel": {
     "message": "锁定此标签页"
-  },
-  "hintProtectedPinned": {
-    "message": "已保护（已固定）"
-  },
-  "hintProtectedManual": {
-    "message": "已手动保护"
-  },
-  "hintAutoOff": {
-    "message": "固定标签页自动保护已关闭"
   },
   "hintPlain": {
     "message": "普通标签页"
@@ -36,7 +21,7 @@
     "message": "没有固定标签页"
   },
   "snapNamePlaceholder": {
-    "message": "快照集名称（如：工作）"
+    "message": "集合名称（如：工作）"
   },
   "saveBtn": {
     "message": "保存"
@@ -63,10 +48,10 @@
     "message": "在另一个窗口"
   },
   "snapsHeader": {
-    "message": "快照集"
+    "message": "集合"
   },
   "noSnaps": {
-    "message": "还没有快照集 - 保存当前的吧。"
+    "message": "还没有集合 - 保存当前的吧。"
   },
   "autoHeader": {
     "message": "自动保存"
@@ -78,7 +63,7 @@
     "message": "恢复"
   },
   "deleteTitle": {
-    "message": "删除快照集"
+    "message": "删除集合"
   },
   "confirmDelete": {
     "message": "确定？"
@@ -90,19 +75,19 @@
     "message": "仅限此设备"
   },
   "statusNameEmpty": {
-    "message": "请给快照集起个名字"
+    "message": "请给集合起个名字"
   },
   "statusSaved": {
-    "message": "快照集“$1”已保存（$2）"
+    "message": "集合“$1”已保存（$2）"
   },
   "statusDeleted": {
-    "message": "快照集“$1”已删除"
+    "message": "集合“$1”已删除"
   },
   "statusRestored": {
     "message": "已恢复：打开 $1 个，保留 $2 个，关闭 $3 个"
   },
   "statusUndo": {
-    "message": "之前的快照集在自动保存中"
+    "message": "之前的集合在自动保存中"
   },
   "relNow": {
     "message": "刚刚"
@@ -130,21 +115,6 @@
   },
   "optAutoLockHint": {
     "message": "取消固定的同时也会取消保护。"
-  },
-  "optShowIcon": {
-    "message": "在受保护标签页的标题中添加 🔒"
-  },
-  "optRestoreNet": {
-    "message": "恢复未经确认就被关闭的受保护标签页"
-  },
-  "optRestoreNetHint": {
-    "message": "只有在与页面交互过之后，Chrome 才会显示“离开网站？”对话框。如果受保护的标签页被静默关闭（页面未被触碰、被内存释放、chrome:// 页面），扩展会将其恢复。"
-  },
-  "optCooldownPre": {
-    "message": "在"
-  },
-  "optCooldownPost": {
-    "message": "秒内再次关闭即彻底关闭"
   },
   "optMirror": {
     "message": "在所有窗口镜像固定标签页"
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "已保护",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "支持 TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin 免费且将永远免费 - 没有任何功能被锁定。如果它帮到了你，欢迎通过自愿的一次性捐助支持开发。作为感谢，你的名字将加入仓库中的 SUPPORTERS 名单。",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "支持",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "谢谢你的支持！",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "把我加入 SUPPORTERS 名单",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "说声谢谢"

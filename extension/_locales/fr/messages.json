@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Onglets épinglés, bien faits : confirmation de fermeture, restauration automatique des onglets fermés silencieusement, miroir dans toutes les fenêtres et ensembles."
+    "message": "Onglets épinglés bien faits : les fermetures accidentelles sont annulées, miroir multi-fenêtres, ensembles synchronisés."
   },
   "actionProtected": {
     "message": "TruePin : onglet protégé"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin : non protégé"
   },
-  "notifTitle": {
-    "message": "TruePin : onglet restauré"
-  },
-  "notifMsg": {
-    "message": "Un onglet protégé a été fermé sans confirmation, il a donc été restauré. Pour le fermer définitivement : fermez-le à nouveau dans les $1 s, désépinglez-le ou désactivez le verrou dans la fenêtre."
-  },
   "popupLockLabel": {
     "message": "Verrouiller cet onglet"
-  },
-  "hintProtectedPinned": {
-    "message": "Protégé (épinglé)"
-  },
-  "hintProtectedManual": {
-    "message": "Protégé manuellement"
-  },
-  "hintAutoOff": {
-    "message": "La protection auto des onglets épinglés est désactivée"
   },
   "hintPlain": {
     "message": "Onglet ordinaire"
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Désépingler retire aussi la protection."
   },
-  "optShowIcon": {
-    "message": "Ajouter 🔒 au titre d'un onglet protégé"
-  },
-  "optRestoreNet": {
-    "message": "Restaurer un onglet protégé fermé sans confirmation"
-  },
-  "optRestoreNetHint": {
-    "message": "Chrome n'affiche le dialogue « Quitter le site ? » qu'après une interaction avec la page. Si un onglet protégé s'est fermé silencieusement (page intacte, déchargée de la mémoire, chrome://), l'extension le remet en place."
-  },
-  "optCooldownPre": {
-    "message": "Fermer à nouveau dans les"
-  },
-  "optCooldownPost": {
-    "message": "secondes ferme définitivement"
-  },
   "optMirror": {
     "message": "Refléter les onglets épinglés dans toutes les fenêtres"
   },
@@ -156,7 +126,7 @@
     "message": "Conserver les sauvegardes auto de l'ensemble (10 dernières)"
   },
   "optAutoSnapsHint": {
-    "message": "Enregistré quand un onglet épinglé est ajouté, retiré ou navigue vers une autre page (les changements limités aux paramètres GET sont ignorés). Restaurable depuis la fenêtre - y compris après la fermeture d'une fenêtre entière."
+    "message": "Enregistré quand un onglet épinglé est ajouté, retiré ou navigue vers une autre page (les changements limités aux paramètres GET sont ignorés). Restaurable depuis le pop-up - y compris après la fermeture d'une fenêtre entière."
   },
   "optLang": {
     "message": "Langue"
@@ -192,7 +162,7 @@
     "message": "Les onglets épinglés ne se ferment pas. Désépinglez pour fermer."
   },
   "notifReopenedManual": {
-    "message": "Cet onglet est verrouillé. Déverrouillez-le dans la fenêtre pour fermer."
+    "message": "Cet onglet est verrouillé. Déverrouillez-le dans le pop-up pour fermer."
   },
   "splitTitle": {
     "message": "Écran partagé",
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Protégé",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "Soutenir TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin est gratuit et le restera - rien n'est verrouillé. S'il vous rend service, vous pouvez soutenir le développement par une contribution volontaire unique. En remerciement, votre nom rejoint la liste SUPPORTERS du dépôt.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Soutenir",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "Merci - vous soutenez le projet !",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "M'ajouter à la liste SUPPORTERS",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Dire merci"

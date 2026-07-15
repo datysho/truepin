@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Angepinnte Tabs, richtig gemacht: Schließbestätigung, Auto-Wiederherstellung still geschlossener Tabs, Spiegelung in allen Fenstern und Sets."
+    "message": "Angepinnte Tabs richtig: versehentliches Schließen wird rückgängig gemacht, Spiegelung in allen Fenstern, Sets synchronisiert."
   },
   "actionProtected": {
     "message": "TruePin: Tab geschützt"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin: nicht geschützt"
   },
-  "notifTitle": {
-    "message": "TruePin: Tab wiederhergestellt"
-  },
-  "notifMsg": {
-    "message": "Ein geschützter Tab wurde ohne Bestätigung geschlossen und wurde wiederhergestellt. Endgültig schließen: innerhalb von $1 s erneut schließen, Tab lösen oder das Schloss im Popup ausschalten."
-  },
   "popupLockLabel": {
     "message": "Diesen Tab sperren"
-  },
-  "hintProtectedPinned": {
-    "message": "Geschützt (angepinnt)"
-  },
-  "hintProtectedManual": {
-    "message": "Manuell geschützt"
-  },
-  "hintAutoOff": {
-    "message": "Auto-Schutz angepinnter Tabs ist aus"
   },
   "hintPlain": {
     "message": "Normaler Tab"
@@ -51,7 +36,7 @@
     "message": "Gesperrt"
   },
   "lockedHelper": {
-    "message": "Bis zum Schließen von Chrome vor dem Schließen geschützt. Nicht synchronisiert, nicht in Sets."
+    "message": "Vor dem Schließen geschützt, bis du Chrome beendest. Nicht synchronisiert, nicht in Sets."
   },
   "unlockTitle": {
     "message": "Tab entsperren"
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Das Lösen entfernt auch den Schutz."
   },
-  "optShowIcon": {
-    "message": "🔒 zum Titel eines geschützten Tabs hinzufügen"
-  },
-  "optRestoreNet": {
-    "message": "Einen ohne Bestätigung geschlossenen geschützten Tab wiederherstellen"
-  },
-  "optRestoreNetHint": {
-    "message": "Chrome zeigt den „Seite verlassen?“-Dialog erst nach einer Interaktion mit der Seite. Wurde ein geschützter Tab still geschlossen (Seite unberührt, aus dem Speicher entladen, chrome://) - bringt ihn die Erweiterung zurück."
-  },
-  "optCooldownPre": {
-    "message": "Erneutes Schließen innerhalb von"
-  },
-  "optCooldownPost": {
-    "message": "Sekunden schließt endgültig"
-  },
   "optMirror": {
     "message": "Angepinnte Tabs in allen Fenstern spiegeln"
   },
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Geschützt",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "TruePin unterstützen",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin ist kostenlos und bleibt es - nichts ist gesperrt. Wenn es dir hilft, kannst du die Entwicklung mit einem freiwilligen einmaligen Beitrag unterstützen. Als Dankeschön kommt dein Name in die SUPPORTERS-Liste im Repository.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Unterstützen",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "Danke - du unterstützt das Projekt!",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "Mich in die SUPPORTERS-Liste eintragen",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Danke sagen"

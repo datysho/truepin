@@ -48,9 +48,6 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
   save and restore sets of pinned tabs.
 - **Permission justifications:**
   - tabs - detect pinned tabs, notice closes, reopen them, mirror across windows.
-  - scripting + host access `<all_urls>` - a pinned tab can be on any site, so
-    the content script must run on all sites to protect them; no page content is
-    read or transmitted.
   - storage - save settings, autosaves (local) and named sets (synced).
   - sessions - silently reopen a just-closed protected tab.
   - notifications - optionally notify when a protected tab is restored.

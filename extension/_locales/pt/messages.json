@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Abas fixadas, do jeito certo: confirmação de fechamento, restauração automática de abas fechadas em silêncio, espelhamento em todas as janelas e conjuntos."
+    "message": "Abas fixadas, do jeito certo: fechamentos acidentais são desfeitos na hora, espelho em todas as janelas e conjuntos sincronizados."
   },
   "actionProtected": {
     "message": "TruePin: aba protegida"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin: sem proteção"
   },
-  "notifTitle": {
-    "message": "TruePin: aba restaurada"
-  },
-  "notifMsg": {
-    "message": "Uma aba protegida foi fechada sem confirmação, então eu a trouxe de volta. Para fechar de vez: feche-a novamente em $1 s, desafixe-a ou desligue o cadeado no popup."
-  },
   "popupLockLabel": {
     "message": "Travar esta aba"
-  },
-  "hintProtectedPinned": {
-    "message": "Protegida (fixada)"
-  },
-  "hintProtectedManual": {
-    "message": "Protegida manualmente"
-  },
-  "hintAutoOff": {
-    "message": "A proteção automática de fixadas está desligada"
   },
   "hintPlain": {
     "message": "Aba comum"
@@ -48,13 +33,13 @@
     "message": "Atualizar conjuntos"
   },
   "lockedLabel": {
-    "message": "Bloqueadas"
+    "message": "Travadas"
   },
   "lockedHelper": {
     "message": "Protegidas contra fechamento até você fechar o Chrome. Não sincronizam nem entram em conjuntos."
   },
   "unlockTitle": {
-    "message": "Desbloquear esta aba"
+    "message": "Destravar esta aba"
   },
   "gotoTitle": {
     "message": "Ir para a aba"
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Desafixar também remove a proteção."
   },
-  "optShowIcon": {
-    "message": "Adicionar 🔒 ao título de uma aba protegida"
-  },
-  "optRestoreNet": {
-    "message": "Restaurar uma aba protegida fechada sem confirmação"
-  },
-  "optRestoreNetHint": {
-    "message": "O Chrome mostra o diálogo “Sair do site?” apenas após interação com a página. Se uma aba protegida fechou em silêncio (página intocada, descarregada da memória, chrome://), a extensão a traz de volta."
-  },
-  "optCooldownPre": {
-    "message": "Fechar novamente dentro de"
-  },
-  "optCooldownPost": {
-    "message": "segundos fecha de vez"
-  },
   "optMirror": {
     "message": "Espelhar as abas fixadas em todas as janelas"
   },
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Protegida",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "Apoiar o TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "O TruePin é gratuito e assim continuará - nada está bloqueado. Se ele te ajuda, você pode apoiar o desenvolvimento com uma contribuição voluntária única. Como agradecimento, seu nome entra na lista SUPPORTERS do repositório.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Apoiar",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "Obrigado por apoiar o projeto!",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "Adicionar-me à lista SUPPORTERS",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Agradecer"

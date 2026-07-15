@@ -501,7 +501,7 @@ async function closeTabs(tabIds) {
   );
 }
 
-// --- messages (content scripts + popup UI) --------------------------------
+// --- messages (popup UI) --------------------------------
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (!request || typeof request.type !== "string") return;
 
@@ -986,7 +986,7 @@ async function saveSnapshot(name, windowId) {
   try {
     await chrome.storage.sync.set({ [key]: value });
     await chrome.storage.local.remove(key); // clear any older too-big copy of this name
-    return { ok: true };
+    return { ok: true, count: value.urls.length };
   } catch {
     // Sync rejected: item over 8KB, total quota hit, or sync unavailable. Keep
     // the set on this machine so an explicit save is never lost - it just will
@@ -1165,7 +1165,9 @@ async function handleUi(request) {
   const settings = await getSettings();
   switch (request.type) {
     case "ui:getState": {
-      const pinned = await pinnedTabsOf(request.windowId);
+      const pinned = (await pinnedTabsOf(request.windowId)).filter(
+        (t) => !isEphemeralUrl(tabUrl(t)),
+      );
       let active = null;
       if (request.tabId !== undefined) {
         const tab = await quiet(chrome.tabs.get, request.tabId);
@@ -1181,10 +1183,9 @@ async function handleUi(request) {
       }
       const ring = await getAutoSnaps();
       return {
-        // `protected` is the real per-tab state (same rule as `active`), NOT
-        // the 🔒 title prefix the content script writes: a discarded or
-        // not-yet-scripted pin is genuinely protected but carries no prefix,
-        // so the popup must render the lock from this, not from the title.
+        // `protected` is the real per-tab state (same rule as `active`), so the
+        // popup renders the lock from this even for a discarded pin that has
+        // not reported its state yet.
         pinned: await Promise.all(
           pinned.map(async (t) => {
             const st = (await getTabState(t.id)) || newTabState(t);

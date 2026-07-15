@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Pinned tabs, done right: close confirmation, auto-restore of silently closed pinned tabs, mirroring across windows and snapshots."
+    "message": "Pinned tabs, done right: accidental closes are instantly undone, pins mirrored across windows, and named sets saved and synced."
   },
   "actionProtected": {
     "message": "TruePin: tab protected"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin: not protected"
   },
-  "notifTitle": {
-    "message": "TruePin: tab restored"
-  },
-  "notifMsg": {
-    "message": "A protected tab was closed without confirmation, so I brought it back. To close it for good: close it again within $1 s, unpin it, or turn the lock off in the popup."
-  },
   "popupLockLabel": {
     "message": "Lock this tab"
-  },
-  "hintProtectedPinned": {
-    "message": "Protected (pinned)"
-  },
-  "hintProtectedManual": {
-    "message": "Protected manually"
-  },
-  "hintAutoOff": {
-    "message": "Auto-protection of pinned tabs is off"
   },
   "hintPlain": {
     "message": "Regular tab"
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Unpinning also removes the protection."
   },
-  "optShowIcon": {
-    "message": "Add 🔒 to the title of a protected tab"
-  },
-  "optRestoreNet": {
-    "message": "Restore a protected tab closed without confirmation"
-  },
-  "optRestoreNetHint": {
-    "message": "Chrome shows the “Leave site?” dialog only after you have interacted with the page. If a protected tab closed silently (page untouched, discarded from memory, chrome://) - the extension brings it back."
-  },
-  "optCooldownPre": {
-    "message": "Closing again within"
-  },
-  "optCooldownPost": {
-    "message": "seconds closes for good"
-  },
   "optMirror": {
     "message": "Mirror pinned tabs across all windows"
   },
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Protected",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "Support TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin is free and always will be - nothing is locked. If it saves your tabs, you can chip in with a one-time voluntary contribution. As a thank-you, your name joins the SUPPORTERS list in the repository.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Support",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "Thank you - you're a supporter!",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "Add me to the SUPPORTERS list",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Say thanks",

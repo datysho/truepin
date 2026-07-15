@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Pestañas fijadas, bien hechas: confirmación de cierre, restauración automática de pestañas cerradas en silencio, espejo en todas las ventanas y conjuntos."
+    "message": "Pestañas fijadas, bien hechas: los cierres accidentales se deshacen al instante, espejo entre ventanas y conjuntos sincronizados."
   },
   "actionProtected": {
     "message": "TruePin: pestaña protegida"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin: sin protección"
   },
-  "notifTitle": {
-    "message": "TruePin: pestaña restaurada"
-  },
-  "notifMsg": {
-    "message": "Una pestaña protegida se cerró sin confirmación, así que la recuperé. Para cerrarla definitivamente: ciérrala de nuevo en $1 s, desfíjala o apaga el candado en el popup."
-  },
   "popupLockLabel": {
     "message": "Bloquear esta pestaña"
-  },
-  "hintProtectedPinned": {
-    "message": "Protegida (fijada)"
-  },
-  "hintProtectedManual": {
-    "message": "Protegida manualmente"
-  },
-  "hintAutoOff": {
-    "message": "La protección automática de fijadas está apagada"
   },
   "hintPlain": {
     "message": "Pestaña normal"
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Desfijar también quita la protección."
   },
-  "optShowIcon": {
-    "message": "Añadir 🔒 al título de una pestaña protegida"
-  },
-  "optRestoreNet": {
-    "message": "Restaurar una pestaña protegida cerrada sin confirmación"
-  },
-  "optRestoreNetHint": {
-    "message": "Chrome muestra el diálogo «¿Salir del sitio?» solo tras interactuar con la página. Si una pestaña protegida se cerró en silencio (página sin tocar, descargada de memoria, chrome://), la extensión la devuelve."
-  },
-  "optCooldownPre": {
-    "message": "Cerrar de nuevo dentro de"
-  },
-  "optCooldownPost": {
-    "message": "segundos cierra definitivamente"
-  },
   "optMirror": {
     "message": "Reflejar las pestañas fijadas en todas las ventanas"
   },
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Protegida",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "Apoyar TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin es gratis y lo seguirá siendo - nada está bloqueado. Si te resulta útil, puedes apoyar el desarrollo con una aportación voluntaria única. Como agradecimiento, tu nombre entra en la lista SUPPORTERS del repositorio.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Apoyar",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "¡Gracias por apoyar el proyecto!",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "Añadirme a la lista SUPPORTERS",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Dar las gracias"

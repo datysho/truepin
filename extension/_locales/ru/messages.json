@@ -1,6 +1,6 @@
 {
   "appDesc": {
-    "message": "Закреплённые вкладки как надо: подтверждение закрытия, авто-восстановление тихо закрытых, зеркалирование во всех окнах и наборы."
+    "message": "Закреплённые вкладки как надо: случайное закрытие сразу отменяется, зеркало во всех окнах, наборы сохраняются и синхронизируются."
   },
   "actionProtected": {
     "message": "TruePin: вкладка защищена"
@@ -8,23 +8,8 @@
   "actionUnprotected": {
     "message": "TruePin: без защиты"
   },
-  "notifTitle": {
-    "message": "TruePin: вкладка восстановлена"
-  },
-  "notifMsg": {
-    "message": "Защищённая вкладка была закрыта без подтверждения - вернул её на место. Закрыть насовсем: закрой её ещё раз в течение $1 с, сними закрепление или выключи замок в попапе."
-  },
   "popupLockLabel": {
     "message": "Замок на этой вкладке"
-  },
-  "hintProtectedPinned": {
-    "message": "Защищена (закреплена)"
-  },
-  "hintProtectedManual": {
-    "message": "Защищена вручную"
-  },
-  "hintAutoOff": {
-    "message": "Автозащита закреплённых выключена"
   },
   "hintPlain": {
     "message": "Обычная вкладка"
@@ -48,7 +33,7 @@
     "message": "Обновить наборы"
   },
   "lockedLabel": {
-    "message": "Заблокированы"
+    "message": "Заблокированные"
   },
   "lockedHelper": {
     "message": "Защищены от закрытия до выхода из Chrome. Не синхронизируются и не входят в наборы."
@@ -131,21 +116,6 @@
   "optAutoLockHint": {
     "message": "Снятие закрепления снимает и защиту."
   },
-  "optShowIcon": {
-    "message": "Добавлять 🔒 к заголовку защищённой вкладки"
-  },
-  "optRestoreNet": {
-    "message": "Восстанавливать защищённую вкладку, закрытую без подтверждения"
-  },
-  "optRestoreNetHint": {
-    "message": "Chrome показывает диалог «Leave site?» только после взаимодействия со страницей. Если защищённая вкладка закрылась тихо (страница ещё не трогалась, выгружена из памяти, chrome://) - расширение вернёт её на место."
-  },
-  "optCooldownPre": {
-    "message": "Повторное закрытие в течение"
-  },
-  "optCooldownPost": {
-    "message": "секунд закрывает насовсем"
-  },
   "optMirror": {
     "message": "Зеркалировать закреплённые во всех окнах"
   },
@@ -201,26 +171,6 @@
   "pinnedProtectedTitle": {
     "message": "Защищена",
     "description": "Tooltip: this pinned tab is protected"
-  },
-  "supportHeader": {
-    "message": "Поддержать TruePin",
-    "description": "Options: header of the voluntary-support section"
-  },
-  "supportHint": {
-    "message": "TruePin бесплатен и останется бесплатным - ничего не заперто. Если он выручает, можно поддержать разработку добровольным разовым взносом. В благодарность ваше имя попадёт в список SUPPORTERS в репозитории.",
-    "description": "Options: explains the contribution is voluntary, nothing is locked"
-  },
-  "supportBtn": {
-    "message": "Поддержать",
-    "description": "Options: the Support button"
-  },
-  "supportThanks": {
-    "message": "Спасибо - вы поддержали проект!",
-    "description": "Options: shown instead of the button once the user has contributed"
-  },
-  "supportList": {
-    "message": "Добавить меня в список SUPPORTERS",
-    "description": "Options: link to get listed in SUPPORTERS.md"
   },
   "footerDonate": {
     "message": "Сказать спасибо"
