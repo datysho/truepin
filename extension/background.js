@@ -1190,6 +1190,7 @@ async function handleUi(request) {
             const st = (await getTabState(t.id)) || newTabState(t);
             return {
               id: t.id,
+              windowId: t.windowId,
               title: t.title || tabUrl(t),
               url: tabUrl(t),
               protected: computeProtected({ ...st, pinned: !!t.pinned, url: tabUrl(t) }, settings),

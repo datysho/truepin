@@ -258,11 +258,13 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        cursor: pointer;
       }
       /* Calmer empty state (grafted from D2). */
       .tab-list li.muted {
         padding: 12px 8px;
         color: var(--muted);
+        cursor: default;
       }
       .tab-list li.muted:hover {
         background: transparent;
@@ -316,9 +318,6 @@
       .locked-help {
         margin: 6px 2px 0;
         font-size: 11px;
-      }
-      #lockedList li {
-        cursor: pointer;
       }
       #lockedList li .winmark {
         flex: none;

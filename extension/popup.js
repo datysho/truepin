@@ -206,6 +206,8 @@ function render() {
   }
   for (const tab of state.pinned) {
     const li = document.createElement("li");
+    li.title = t("gotoTitle");
+    li.addEventListener("click", () => focusTab(tab.id, tab.windowId));
     const img = document.createElement("img");
     img.src = favicon(tab.url);
     li.append(img);
