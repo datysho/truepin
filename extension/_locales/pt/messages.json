@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Atualizar conjuntos"
   },
+  "lockedLabel": {
+    "message": "Bloqueadas"
+  },
+  "lockedHelper": {
+    "message": "Protegidas contra fechamento até você fechar o Chrome. Não sincronizam nem entram em conjuntos."
+  },
+  "unlockTitle": {
+    "message": "Desbloquear esta aba"
+  },
+  "gotoTitle": {
+    "message": "Ir para a aba"
+  },
+  "otherWindowTitle": {
+    "message": "Em outra janela"
+  },
   "snapsHeader": {
     "message": "Conjuntos"
   },

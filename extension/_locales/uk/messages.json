@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Оновити набори"
   },
+  "lockedLabel": {
+    "message": "Заблоковані"
+  },
+  "lockedHelper": {
+    "message": "Захищені від закриття до виходу з Chrome. Не синхронізуються і не входять у набори."
+  },
+  "unlockTitle": {
+    "message": "Розблокувати вкладку"
+  },
+  "gotoTitle": {
+    "message": "Перейти до вкладки"
+  },
+  "otherWindowTitle": {
+    "message": "В іншому вікні"
+  },
   "snapsHeader": {
     "message": "Набори"
   },

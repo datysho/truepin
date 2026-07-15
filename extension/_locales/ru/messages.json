@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Обновить наборы"
   },
+  "lockedLabel": {
+    "message": "Заблокированы"
+  },
+  "lockedHelper": {
+    "message": "Защищены от закрытия до выхода из Chrome. Не синхронизируются и не входят в наборы."
+  },
+  "unlockTitle": {
+    "message": "Разблокировать вкладку"
+  },
+  "gotoTitle": {
+    "message": "Перейти к вкладке"
+  },
+  "otherWindowTitle": {
+    "message": "В другом окне"
+  },
   "snapsHeader": {
     "message": "Наборы"
   },

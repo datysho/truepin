@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Actualiser les ensembles"
   },
+  "lockedLabel": {
+    "message": "Verrouillés"
+  },
+  "lockedHelper": {
+    "message": "Protégés contre la fermeture jusqu'à ce que vous fermiez Chrome. Non synchronisés, pas dans les ensembles."
+  },
+  "unlockTitle": {
+    "message": "Déverrouiller cet onglet"
+  },
+  "gotoTitle": {
+    "message": "Aller à l'onglet"
+  },
+  "otherWindowTitle": {
+    "message": "Dans une autre fenêtre"
+  },
   "snapsHeader": {
     "message": "Ensembles"
   },

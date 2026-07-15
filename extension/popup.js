@@ -123,6 +123,67 @@ function snapRow({ label, meta, metaTitle, onRestore, onDelete, tooltip }) {
   return row;
 }
 
+const OPEN_LOCK_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
+
+// The LOCKED shelf: manually-locked non-pinned tabs across all windows. Rendered
+// only when there is at least one, so at rest the popup is byte-for-byte as before.
+function renderLocked() {
+  const section = $("lockedSection");
+  const locked = (state && state.locked) || [];
+  if (!locked.length) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  $("lockCount").textContent = `(${locked.length})`;
+  const list = $("lockedList");
+  list.textContent = "";
+  // Current-window locks first, then the ones living in other windows.
+  const rows = [...locked].sort(
+    (a, b) => (a.windowId === windowId ? 0 : 1) - (b.windowId === windowId ? 0 : 1),
+  );
+  for (const tab of rows) {
+    const li = document.createElement("li");
+    li.title = t("gotoTitle");
+    const img = document.createElement("img");
+    img.src = favicon(tab.url);
+    li.append(img);
+    const lock = document.createElement("span");
+    lock.className = "lockmark";
+    lock.textContent = "\u{1F512}";
+    li.append(lock);
+    const span = document.createElement("span");
+    span.className = "t";
+    span.textContent = stripLockPrefix(tab.title);
+    li.append(span);
+    if (tab.windowId !== windowId) {
+      const other = document.createElement("span");
+      other.className = "winmark";
+      other.title = t("otherWindowTitle");
+      li.append(other);
+    }
+    const unlock = document.createElement("button");
+    unlock.className = "u";
+    unlock.title = t("unlockTitle");
+    unlock.innerHTML = OPEN_LOCK_SVG;
+    unlock.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await send({ type: "ui:clearLock", tabId: tab.id });
+      refresh();
+    });
+    li.append(unlock);
+    li.addEventListener("click", () => focusTab(tab.id, tab.windowId));
+    list.append(li);
+  }
+}
+
+async function focusTab(id, win) {
+  await chrome.windows.update(win, { focused: true });
+  await chrome.tabs.update(id, { active: true });
+  window.close();
+}
+
 function render() {
   // The switch: on a pinned tab it drives the GLOBAL auto-protection of
   // pinned tabs; on a regular tab it is that tab's own manual lock.
@@ -173,6 +234,7 @@ function render() {
   }
   $("saveBtn").disabled = !state.pinned.length;
   updateSaveButton();
+  renderLocked();
 
   // Named snapshots.
   const snapList = $("snapList");
@@ -301,11 +363,16 @@ async function init() {
     refresh();
   });
 
-  // Named sets live in storage.sync; when Chrome propagates one saved on another
-  // machine, reflect it live instead of only on the next popup open.
+  // Named sets live in storage.sync; locks live in storage.session. Reflect
+  // either changing live (a set propagated from another machine, or a lock set
+  // elsewhere) instead of only on the next popup open.
+  let sessionRefreshTimer = null;
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "sync" && Object.keys(changes).some((k) => k.startsWith("snap:"))) {
       refresh();
+    } else if (area === "session" && Object.keys(changes).some((k) => /^t\d+$/.test(k))) {
+      clearTimeout(sessionRefreshTimer);
+      sessionRefreshTimer = setTimeout(refresh, 150);
     }
   });
 

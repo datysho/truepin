@@ -313,6 +313,45 @@
         mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Cline x1='12' y1='4' x2='12' y2='20'/%3E%3C/svg%3E");
       }
 
+      .locked-help {
+        margin: 6px 2px 0;
+        font-size: 11px;
+      }
+      #lockedList li {
+        cursor: pointer;
+      }
+      #lockedList li .winmark {
+        flex: none;
+        width: 13px;
+        height: 13px;
+        color: var(--muted);
+        background-color: currentColor;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Cpath d='M3 9h18'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Cpath d='M3 9h18'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+      #lockedList li .u {
+        flex: none;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border-radius: 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      #lockedList li .u:hover {
+        background: var(--active);
+        color: var(--text);
+      }
+      #lockedList li .u svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
       .save-row {
         display: flex;
         gap: 8px;
@@ -552,6 +591,12 @@
           <input type="text" id="snapName" data-i18n-placeholder="snapNamePlaceholder" maxlength="40" />
           <button class="primary" id="saveBtn"></button>
         </div>
+      </section>
+
+      <section id="lockedSection" hidden>
+        <h3><span data-i18n="lockedLabel"></span> <span id="lockCount"></span></h3>
+        <ul class="tab-list" id="lockedList"></ul>
+        <p class="muted locked-help" data-i18n="lockedHelper"></p>
       </section>
 
       <section>

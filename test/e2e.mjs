@@ -418,6 +418,38 @@ async function main() {
   const autoRing = () =>
     swEval(async () => (await chrome.storage.local.get("autoSnaps")).autoSnaps || []);
 
+  await test("locked shelf: manual-locked non-pinned tabs surface in getState and clear to null", async () => {
+    step("open a regular tab and manually lock it");
+    const a = await openPage("/lock-a");
+    const winId = await swEval(async (id) => (await chrome.tabs.get(id)).windowId, a.tab.id);
+    await swEval((id) => globalThis.truePinToggle(id), a.tab.id);
+    await waitFor("A protected via manual lock", async () => (await tabState(a.tab.id))?.protected === true);
+
+    step("getState lists it under `locked`, not `pinned`");
+    let s = await uiCall({ type: "ui:getState", windowId: winId, tabId: a.tab.id });
+    const rowA = (s.locked || []).find((t) => (t.url || "").includes("/lock-a"));
+    assert(rowA && rowA.windowId === winId, `locked row present (${JSON.stringify(s.locked)})`);
+    assert(!(s.pinned || []).some((t) => (t.url || "").includes("/lock-a")), "not in the pinned list");
+
+    step("ui:clearLock releases it and leaves manual === null (NOT false)");
+    await uiCall({ type: "ui:clearLock", tabId: a.tab.id });
+    await waitFor("A unprotected", async () => (await tabState(a.tab.id))?.protected === false);
+    const st = await tabState(a.tab.id);
+    assert(st.manual === null, `manual cleared to null, got ${JSON.stringify(st.manual)}`);
+    s = await uiCall({ type: "ui:getState", windowId: winId, tabId: a.tab.id });
+    assert(!(s.locked || []).some((t) => (t.url || "").includes("/lock-a")), "gone from the locked shelf");
+
+    step("regression: after clearLock, pinning auto-protects (manual=false would have blocked it)");
+    await setPinned(a.tab.id, true);
+    await waitFor("A auto-protected once pinned", async () => (await tabState(a.tab.id))?.protected === true);
+
+    step("cleanup: unpin and close");
+    await setPinned(a.tab.id, false);
+    await sleep(900);
+    const live = await findTab("/lock-a");
+    if (live) await removeTab(live.id);
+  });
+
   await test("popup lock is state-driven: ui:getState reports real protected per pin, not the 🔒 title", async () => {
     // Regression: the popup used to infer each row's lock from the content
     // script's 🔒 title prefix. A protected pin that was never scripted (a

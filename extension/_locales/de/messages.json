@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Sets aktualisieren"
   },
+  "lockedLabel": {
+    "message": "Gesperrt"
+  },
+  "lockedHelper": {
+    "message": "Bis zum Schließen von Chrome vor dem Schließen geschützt. Nicht synchronisiert, nicht in Sets."
+  },
+  "unlockTitle": {
+    "message": "Tab entsperren"
+  },
+  "gotoTitle": {
+    "message": "Zum Tab wechseln"
+  },
+  "otherWindowTitle": {
+    "message": "In einem anderen Fenster"
+  },
   "snapsHeader": {
     "message": "Sets"
   },

@@ -1146,6 +1146,21 @@ globalThis.__tpSimulateReload = () => {
 };
 
 // --- popup UI backend -----------------------------------------------------------
+// Manually-locked NON-pinned tabs across all normal windows, for the popup's
+// LOCKED shelf. One session scan + one tab query, no per-tab round-trips.
+async function lockedTabs() {
+  const rec = await chrome.storage.session.get(null);
+  const ids = new Set();
+  for (const [key, value] of Object.entries(rec)) {
+    if (/^t\d+$/.test(key) && value && value.manual === true) ids.add(Number(key.slice(1)));
+  }
+  if (!ids.size) return [];
+  const tabs = await chrome.tabs.query({});
+  return tabs
+    .filter((t) => ids.has(t.id) && !t.pinned && !isEphemeralUrl(tabUrl(t)))
+    .map((t) => ({ id: t.id, title: t.title || tabUrl(t), url: tabUrl(t), windowId: t.windowId }));
+}
+
 async function handleUi(request) {
   const settings = await getSettings();
   switch (request.type) {
@@ -1186,6 +1201,7 @@ async function handleUi(request) {
           }),
         ),
         active,
+        locked: await lockedTabs(),
         snapshots: await listSnapshots(),
         autoSnaps: ring.map((snap, index) => ({
           index,
@@ -1201,6 +1217,21 @@ async function handleUi(request) {
       if (!tab) return { error: "hintPlain" };
       const state = await toggleTab(tab);
       return { ok: true, protected: state.protected };
+    }
+    case "ui:clearLock": {
+      // Release a manual lock from the LOCKED shelf. Sets manual=null (back to
+      // the derived default), NOT manual=false - so if the tab is later pinned,
+      // auto-protection still applies.
+      const tab = await quiet(chrome.tabs.get, request.tabId);
+      if (!tab) return { error: "hintPlain" };
+      const state = (await getTabState(tab.id)) || newTabState(tab);
+      state.pinned = !!tab.pinned;
+      if (tabUrl(tab)) state.url = tabUrl(tab);
+      state.manual = null;
+      state.protected = computeProtected(state, settings);
+      await putTabState(tab.id, state);
+      applyToTab(tab.id, state, settings);
+      return { ok: true };
     }
     case "ui:setAutoLock": {
       // The popup's toggle on a pinned tab drives the GLOBAL auto-protection.

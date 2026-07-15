@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "Refresh sets"
   },
+  "lockedLabel": {
+    "message": "Locked"
+  },
+  "lockedHelper": {
+    "message": "Kept from closing until you close Chrome. Not synced or saved to sets."
+  },
+  "unlockTitle": {
+    "message": "Unlock this tab"
+  },
+  "gotoTitle": {
+    "message": "Go to tab"
+  },
+  "otherWindowTitle": {
+    "message": "In another window"
+  },
   "snapsHeader": {
     "message": "Sets"
   },

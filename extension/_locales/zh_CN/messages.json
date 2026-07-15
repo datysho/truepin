@@ -47,6 +47,21 @@
   "refreshTitle": {
     "message": "刷新集合"
   },
+  "lockedLabel": {
+    "message": "已锁定"
+  },
+  "lockedHelper": {
+    "message": "在您关闭 Chrome 之前不会被关闭。不同步，也不保存到集合。"
+  },
+  "unlockTitle": {
+    "message": "解锁此标签页"
+  },
+  "gotoTitle": {
+    "message": "跳转到标签页"
+  },
+  "otherWindowTitle": {
+    "message": "在另一个窗口"
+  },
   "snapsHeader": {
     "message": "快照集"
   },
