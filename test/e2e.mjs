@@ -1187,6 +1187,68 @@ async function main() {
     }
   });
 
+  await test("cold-start restore across windows does not duplicate (real browser-restart race)", async () => {
+    // The gap the simulated-reload test above cannot reach: on a real restart
+    // Chrome wipes storage.session and then RE-CREATES the pinned tabs across
+    // every window, firing onCreated with an empty mirror. The engine used to
+    // copy each such pin into windows whose own copy had not been restored
+    // yet, and the restored originals then spawned fresh groups - an N-window
+    // cascade that multiplied the pinned set on every restart. Cold-start
+    // events must instead funnel into ONE stabilizing bootstrap that adopts
+    // what already exists. Here we wipe the mirror and then trickle the same
+    // new pin into each window (as a session restore does).
+    const winIds = [snapWindowId, mirrorWinId, urlWinId];
+    const url = `${baseUrl}/restart-x`;
+
+    step("cold start: wipe mirror state, no bootstrap");
+    await swEval(() => globalThis.__tpWipeState());
+
+    step("session restore trickles the same pin into every window, staggered");
+    for (const wid of winIds) {
+      await swEval(
+        async (args) =>
+          chrome.tabs.create({ windowId: args.wid, url: args.url, pinned: true, active: false }),
+        { wid, url },
+      );
+      await sleep(150);
+    }
+
+    step("let the single cold-start bootstrap settle");
+    await waitFor(
+      "event queue drained",
+      async () => {
+        const d = await swEval(() => ({
+          queued: globalThis.__tpDiag.queued,
+          finished: globalThis.__tpDiag.finished,
+        }));
+        return d.queued === d.finished;
+      },
+      15_000,
+      250,
+    );
+    await sleep(1500);
+
+    step("exactly one copy of the restored pin per window - no cascade");
+    for (const wid of winIds) {
+      const count = (await pinnedOf(wid)).filter((p) => p.url.includes("restart-x")).length;
+      assert(count === 1, `window ${wid}: expected 1 restored pin, got ${count}`);
+    }
+
+    step("cleanup: unpin everywhere, then remove every restart-x tab");
+    for (const wid of winIds) {
+      for (const p of (await pinnedOf(wid)).filter((p) => p.url.includes("restart-x"))) {
+        await setPinned(p.id, false);
+      }
+    }
+    await sleep(1600);
+    for (let i = 0; i < 12; i++) {
+      const t = await findTab("restart-x");
+      if (!t) break;
+      await removeTab(t.id);
+      await sleep(250);
+    }
+  });
+
   await test("mirrorPinned=false: new window stays empty, groups cleared", async () => {
     step("disable mirrorPinned");
     await swEval(() =>

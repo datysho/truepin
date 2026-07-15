@@ -434,6 +434,46 @@ async function rebuildMirror(settings) {
   }
 }
 
+// --- cold-start settling --------------------------------------------------
+// On a cold start (browser restart or extension reload) storage.session is
+// wiped, and Chrome then re-creates the pinned tabs across every window,
+// firing onCreated while the mirror is still empty. Registering those pins
+// live makes the engine copy each one into windows whose own copy has not
+// been restored yet, and the restored originals then spawn fresh groups: an
+// N-window cascade that multiplies the pinned set on every restart. So until
+// the first bootstrap has settled, live tab events touch nothing in the
+// mirror - they only make sure that bootstrap runs. The bootstrap waits for
+// the strips to stabilize, then adopts every existing pin without copying.
+async function isMirrorReady() {
+  const { mirrorReady } = await chrome.storage.session.get("mirrorReady");
+  return !!mirrorReady;
+}
+
+let coldBootstrapInFlight = false;
+function ensureColdBootstrap() {
+  if (coldBootstrapInFlight) return;
+  coldBootstrapInFlight = true;
+  enqueue(async () => {
+    try {
+      if (await isMirrorReady()) return; // another bootstrap already settled it
+      await bootstrapAll();
+    } finally {
+      coldBootstrapInFlight = false;
+    }
+  }, "cold-bootstrap");
+}
+
+// Live tab events (onCreated/onUpdated) route pin registration here; the
+// bootstrap's own syncWindowFill keeps calling registerPinnedTab directly.
+async function registerPinnedLive(tab, settings) {
+  if (!settings.mirrorPinned) return;
+  if (await isMirrorReady()) {
+    await registerPinnedTab(tab, settings);
+  } else {
+    ensureColdBootstrap();
+  }
+}
+
 // --- bootstrap -----------------------------------------------------------
 async function bootstrapAll() {
   const settings = await getSettings();
@@ -443,11 +483,13 @@ async function bootstrapAll() {
     await refreshTab(tab, settings);
   }
   await rebuildMirror(settings);
+  // Mirror settled: live tab events may register pins directly again.
+  await chrome.storage.session.set({ mirrorReady: true });
   scheduleAutoSnapshot();
 }
 
-chrome.runtime.onInstalled.addListener(() => enqueue(() => bootstrapAll(), "installed"));
-chrome.runtime.onStartup.addListener(() => enqueue(() => bootstrapAll(), "startup"));
+chrome.runtime.onInstalled.addListener(() => ensureColdBootstrap());
+chrome.runtime.onStartup.addListener(() => ensureColdBootstrap());
 
 // Settings changed (options page) - recompute every tab, reload language.
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -518,7 +560,7 @@ chrome.tabs.onCreated.addListener((tab) => {
     const settings = await getSettings();
     await refreshTab(tab, settings);
     if (tab.pinned) {
-      await registerPinnedTab(tab, settings);
+      await registerPinnedLive(tab, settings);
       scheduleAutoSnapshot();
     }
   }, "created");
@@ -548,7 +590,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     // Mirroring bookkeeping.
     if (changeInfo.pinned === true) {
-      await registerPinnedTab(tab, settings);
+      await registerPinnedLive(tab, settings);
       scheduleAutoSnapshot();
     }
     if (changeInfo.pinned === false) {
@@ -572,7 +614,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         // A pinned tab that was ephemeral (split-view partner on the empty
         // new-tab page) just navigated somewhere real: it becomes a
         // first-class pin - group it and mirror it now.
-        await registerPinnedTab(tab, settings);
+        await registerPinnedLive(tab, settings);
         scheduleAutoSnapshot();
       }
     }
@@ -1144,6 +1186,18 @@ globalThis.__tpSimulateReload = () => {
   });
   return true;
 };
+// Test hook: a cold start WITHOUT an immediate bootstrap - storage.session is
+// wiped and nothing else runs, so the caller can re-create the pinned tabs
+// (as a session restore does) and let their onCreated events drive the
+// settling path, exactly as on a real browser restart.
+globalThis.__tpWipeState = () =>
+  new Promise((resolve) => {
+    coldBootstrapInFlight = false;
+    chrome.storage.session.clear(() => {
+      void chrome.runtime.lastError;
+      resolve(true);
+    });
+  });
 
 // --- popup UI backend -----------------------------------------------------------
 // Manually-locked NON-pinned tabs across all normal windows, for the popup's
