@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Oscuro"
+  },
+  "optLockFront": {
+    "message": "Mover las pestañas bloqueadas al principio"
+  },
+  "lockFrontOff": {
+    "message": "Desactivado"
+  },
+  "lockFrontOnLock": {
+    "message": "Al bloquear"
+  },
+  "lockFrontAlways": {
+    "message": "Mantener siempre al principio"
   }
 }

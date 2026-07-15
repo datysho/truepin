@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Тёмная"
+  },
+  "optLockFront": {
+    "message": "Переносить заблокированные вкладки в начало"
+  },
+  "lockFrontOff": {
+    "message": "Выключено"
+  },
+  "lockFrontOnLock": {
+    "message": "При блокировке"
+  },
+  "lockFrontAlways": {
+    "message": "Всегда держать в начале"
   }
 }

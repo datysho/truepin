@@ -5,6 +5,7 @@ const DEFAULTS = {
   autoSnapshot: true,
   notifyReopen: true,
   iconStyle: "color",
+  lockToFront: "off",
   theme: "auto",
   language: "auto",
 };

@@ -1272,6 +1272,103 @@ async function main() {
     assert(Object.keys(groups).length === 0, "groups cleared");
   });
 
+  const setLockFront = (mode) =>
+    swEval(
+      (m) =>
+        chrome.storage.sync.set({
+          settings: {
+            autoLockPinned: true,
+            mirrorPinned: false,
+            autoSnapshot: false,
+            notifyReopen: false,
+            lockToFront: m,
+            language: "auto",
+          },
+        }),
+      mode,
+    );
+
+  await test("lockToFront=onLock: locking a regular tab pulls it to the front", async () => {
+    step("settings: lockToFront=onLock, mirror off");
+    await setLockFront("onLock");
+    await sleep(700);
+    step("fresh window: 1 pinned tab + 3 regular tabs");
+    const w = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/lf-pin" });
+      const [first] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.update(first.id, { pinned: true });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/lf-a", active: false });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/lf-b", active: false });
+      const target = await chrome.tabs.create({ windowId: win.id, url: base + "/lf-target", active: false });
+      return { winId: win.id, targetId: target.id };
+    }, baseUrl);
+    await sleep(900);
+    const before = await swEval(async (id) => (await chrome.tabs.get(id)).index, w.targetId);
+    assert(before >= 2, `target starts behind the strip (index ${before})`);
+    step("lock the target regular tab");
+    await swEval((id) => globalThis.truePinToggle(id), w.targetId);
+    await waitFor(
+      "locked target moved to the front of the regular tabs (index 1)",
+      async () => (await swEval(async (id) => (await chrome.tabs.get(id)).index, w.targetId)) === 1,
+      5000,
+      200,
+    );
+    step("cleanup window");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
+    await sleep(500);
+  });
+
+  await test("lockToFront=always: a displaced locked tab snaps back to the front", async () => {
+    step("settings: lockToFront=always");
+    await setLockFront("always");
+    await sleep(700);
+    step("fresh window: 3 regular tabs, lock the first");
+    const w = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/lf2-a" });
+      const [locked] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/lf2-b", active: false });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/lf2-c", active: false });
+      return { winId: win.id, lockedId: locked.id };
+    }, baseUrl);
+    await sleep(800);
+    await swEval((id) => globalThis.truePinToggle(id), w.lockedId);
+    await sleep(700);
+    step("drag it to the back");
+    await swEval((id) => chrome.tabs.move(id, { index: 2 }), w.lockedId);
+    step("always-mode snaps it back to the front (index 0)");
+    await waitFor(
+      "locked tab returned to the front",
+      async () => (await swEval(async (id) => (await chrome.tabs.get(id)).index, w.lockedId)) === 0,
+      5000,
+      200,
+    );
+    step("cleanup window");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
+    await sleep(500);
+  });
+
+  await test("lockToFront=off: locking leaves the tab where it is", async () => {
+    step("settings: lockToFront=off");
+    await setLockFront("off");
+    await sleep(700);
+    const w = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/lf3-a" });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/lf3-b", active: false });
+      const target = await chrome.tabs.create({ windowId: win.id, url: base + "/lf3-target", active: false });
+      return { winId: win.id, targetId: target.id };
+    }, baseUrl);
+    await sleep(900);
+    const before = await swEval(async (id) => (await chrome.tabs.get(id)).index, w.targetId);
+    step("lock the last tab; it must NOT move");
+    await swEval((id) => globalThis.truePinToggle(id), w.targetId);
+    await sleep(900);
+    const after = await swEval(async (id) => (await chrome.tabs.get(id)).index, w.targetId);
+    assert(after === before, `off: index unchanged (was ${before}, now ${after})`);
+    step("cleanup window");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
+    await sleep(500);
+  });
+
   await test("i18n: english by default, russian messages load", async () => {
     const en = await swEval(async () => {
       await ensureI18n();

@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Escuro"
+  },
+  "optLockFront": {
+    "message": "Mover as abas travadas para o início"
+  },
+  "lockFrontOff": {
+    "message": "Desligado"
+  },
+  "lockFrontOnLock": {
+    "message": "Ao travar"
+  },
+  "lockFrontAlways": {
+    "message": "Manter sempre no início"
   }
 }

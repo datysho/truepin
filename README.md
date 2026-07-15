@@ -9,7 +9,7 @@
 <p>
   <img src="https://img.shields.io/badge/Chrome-Manifest_V3-2563eb?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-2563eb?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/version-3.7.4-2563eb?style=flat-square" alt="version 3.7.4">
+  <img src="https://img.shields.io/badge/version-3.7.5-2563eb?style=flat-square" alt="version 3.7.5">
   <img src="https://img.shields.io/badge/network-none-16a34a?style=flat-square" alt="no network requests">
   <img src="https://img.shields.io/badge/languages-8-2563eb?style=flat-square" alt="8 languages">
 </p>
@@ -40,7 +40,7 @@ Reloading and navigating are free - the tab is not going anywhere, after all. Un
 | **Every window in sync** | Pinned tabs are mirrored into every window; pin, unpin and close stay consistent everywhere. Incognito is left alone. |
 | **Named sets** | Save the current pins under a name and restore them in one click. Sets ride Chrome Sync to your other devices. |
 | **Autosaves** | The last 10 states of your pinned set, kept automatically - the safety net and the undo, even after you close a whole window. |
-| **Per-tab lock** | Lock any single tab, pinned or not, straight from the popup. It holds until the browser session ends. |
+| **Per-tab lock** | Lock any single tab, pinned or not, straight from the popup. It holds until the browser session ends, and can optionally be pulled to the front of the tab strip. |
 | **Split-view aware** | Split pairs are recorded and kept adjacent, and restoring a set never tears a live split apart. |
 | **Native and private** | Chrome's own look, light / dark / auto, in 8 languages. No network requests, no tracking, no ads. |
 
@@ -176,7 +176,7 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - `i18n.js` + `_locales/` - 8 languages
 - `icons/`
 
-**Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 29 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
+**Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 32 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, locked tabs pulled to the front, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
 
 ```bash
 cd test && npm install && npm test   # HEADFUL=1 npm test to watch

@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Dunkel"
+  },
+  "optLockFront": {
+    "message": "Gesperrte Tabs nach vorne verschieben"
+  },
+  "lockFrontOff": {
+    "message": "Aus"
+  },
+  "lockFrontOnLock": {
+    "message": "Beim Sperren"
+  },
+  "lockFrontAlways": {
+    "message": "Immer vorne halten"
   }
 }

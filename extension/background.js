@@ -33,6 +33,7 @@ const DEFAULTS = {
   autoSnapshot: true,
   notifyReopen: true,
   iconStyle: "color", // "color" | "mono" (match browser UI)
+  lockToFront: "off", // "off" | "onLock" | "always" - pull locked regular tabs to the front
   language: "auto",
 };
 // Chrome unpins a pinned tab moments before closing it, firing onUpdated
@@ -495,7 +496,13 @@ chrome.runtime.onStartup.addListener(() => ensureColdBootstrap());
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync" || !changes.settings) return;
   i18nReady = null;
-  enqueue(() => bootstrapAll(false), "settings-changed");
+  enqueue(async () => {
+    await bootstrapAll(false);
+    const settings = await getSettings();
+    if (settings.lockToFront === "always") {
+      for (const w of await normalWindows()) await enforceLockedFront(w.id);
+    }
+  }, "settings-changed");
 });
 
 // --- self-closed markers ------------------------------------------------
@@ -556,6 +563,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // --- tab lifecycle ---------------------------------------------------------
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.id === undefined || tab.id === chrome.tabs.TAB_ID_NONE) return;
+  scheduleEnforceLockedFront(tab.windowId);
   enqueue(async () => {
     const settings = await getSettings();
     await refreshTab(tab, settings);
@@ -567,6 +575,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.pinned !== undefined) scheduleEnforceLockedFront(tab.windowId);
   const relevant =
     changeInfo.pinned !== undefined ||
     changeInfo.status === "loading" ||
@@ -861,6 +870,61 @@ chrome.windows.onCreated.addListener((win) => {
     if (!(await waitForStableStrip(win.id))) return;
     await syncWindowFill(win.id, settings);
   }, "window-created");
+});
+
+// --- locked tabs to the front ----------------------------------------------
+// Optional: a manually-locked REGULAR (non-pinned) tab can be pulled to the
+// front of the tab strip, right after the pinned tabs. "onLock" moves it once,
+// the moment it is locked; "always" also keeps every locked regular tab
+// clustered at the front, re-asserting when the strip is reordered. Off by
+// default. Split-view members are left where they are.
+function isSplitTab(tab) {
+  return tab.splitViewId !== undefined && tab.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE;
+}
+
+async function moveLockedToFront(tab) {
+  if (!tab || tab.pinned || isSplitTab(tab) || tab.windowId === undefined) return;
+  const pinned = (await quiet(chrome.tabs.query, { windowId: tab.windowId, pinned: true })) || [];
+  await quiet(chrome.tabs.move, tab.id, { index: pinned.length });
+}
+
+// Cluster every manually-locked regular tab at the front, in their current
+// relative order. Idempotent - re-running with them in place is a no-op, so
+// the onMoved our own moves trigger cannot loop.
+async function enforceLockedFront(windowId) {
+  const settings = await getSettings();
+  if (settings.lockToFront !== "always") return;
+  const tabs = (await quiet(chrome.tabs.query, { windowId })) || [];
+  const pinnedCount = tabs.filter((t) => t.pinned).length;
+  const locked = [];
+  for (const t of tabs) {
+    if (t.pinned || isSplitTab(t)) continue;
+    const st = await getTabState(t.id);
+    if (st && st.manual === true) locked.push(t);
+  }
+  if (!locked.length) return;
+  locked.sort((a, b) => a.index - b.index);
+  if (locked.every((t, i) => t.index === pinnedCount + i)) return; // already in place
+  for (let i = 0; i < locked.length; i++) {
+    await quiet(chrome.tabs.move, locked[i].id, { index: pinnedCount + i });
+  }
+}
+
+const lockFrontTimers = {};
+function scheduleEnforceLockedFront(windowId) {
+  if (windowId === undefined || windowId === chrome.windows.WINDOW_ID_NONE) return;
+  clearTimeout(lockFrontTimers[windowId]);
+  lockFrontTimers[windowId] = setTimeout(() => {
+    delete lockFrontTimers[windowId];
+    enqueue(() => enforceLockedFront(windowId), "lock-front");
+  }, 200);
+}
+
+chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
+  scheduleEnforceLockedFront(moveInfo.windowId);
+});
+chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
+  scheduleEnforceLockedFront(attachInfo.newWindowId);
 });
 
 // --- snapshots -----------------------------------------------------------------
@@ -1167,6 +1231,9 @@ async function toggleTab(tab) {
   state.unpinnedAt = null; // an explicit toggle is always a user decision
   await putTabState(tab.id, state);
   applyToTab(tab.id, state, settings);
+  if (settings.lockToFront !== "off" && state.manual === true && !tab.pinned) {
+    await moveLockedToFront(tab);
+  }
   return state;
 }
 

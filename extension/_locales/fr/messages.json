@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Sombre"
+  },
+  "optLockFront": {
+    "message": "Déplacer les onglets verrouillés au début"
+  },
+  "lockFrontOff": {
+    "message": "Désactivé"
+  },
+  "lockFrontOnLock": {
+    "message": "Au verrouillage"
+  },
+  "lockFrontAlways": {
+    "message": "Toujours garder au début"
   }
 }

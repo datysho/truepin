@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "Темна"
+  },
+  "optLockFront": {
+    "message": "Переносити заблоковані вкладки на початок"
+  },
+  "lockFrontOff": {
+    "message": "Вимкнено"
+  },
+  "lockFrontOnLock": {
+    "message": "Під час блокування"
+  },
+  "lockFrontAlways": {
+    "message": "Завжди тримати на початку"
   }
 }

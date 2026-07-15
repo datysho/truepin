@@ -189,5 +189,17 @@
   },
   "themeDark": {
     "message": "深色"
+  },
+  "optLockFront": {
+    "message": "将锁定的标签页移到最前"
+  },
+  "lockFrontOff": {
+    "message": "关闭"
+  },
+  "lockFrontOnLock": {
+    "message": "锁定时"
+  },
+  "lockFrontAlways": {
+    "message": "始终保持在最前"
   }
 }
