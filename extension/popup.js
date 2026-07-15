@@ -171,9 +171,13 @@ function renderLocked() {
   }
 }
 
-async function focusTab(id, win) {
-  await chrome.windows.update(win, { focused: true });
-  await chrome.tabs.update(id, { active: true });
+// The action popup tears down the moment focus leaves it, so both calls must be
+// dispatched synchronously before that - awaiting the first dropped the second
+// when the popup closed mid-await, which is why clicks never switched tabs.
+// Activate the tab first (the point of the click), then raise its window.
+function focusTab(id, win) {
+  chrome.tabs.update(id, { active: true });
+  chrome.windows.update(win, { focused: true });
   window.close();
 }
 
