@@ -81,6 +81,8 @@ for (const field of FIELDS) {
 }
 localize().then(load);
 
+document.getElementById("version").textContent = "v" + chrome.runtime.getManifest().version;
+
 // --- voluntary support (ExtensionPay) ---------------------------------------
 // Dormant until TP_EXTPAY_ID (config.js) is set. Nothing is gated: the
 // contribution is voluntary; the thank-you is a name in SUPPORTERS.md.

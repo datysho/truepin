@@ -44,6 +44,9 @@
   "updateBtn": {
     "message": "更新"
   },
+  "refreshTitle": {
+    "message": "刷新集合"
+  },
   "snapsHeader": {
     "message": "快照集"
   },

@@ -44,6 +44,9 @@
   "updateBtn": {
     "message": "Actualizar"
   },
+  "refreshTitle": {
+    "message": "Actualizar conjuntos"
+  },
   "snapsHeader": {
     "message": "Conjuntos"
   },

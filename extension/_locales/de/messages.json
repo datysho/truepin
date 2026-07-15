@@ -44,6 +44,9 @@
   "updateBtn": {
     "message": "Aktualisieren"
   },
+  "refreshTitle": {
+    "message": "Sets aktualisieren"
+  },
   "snapsHeader": {
     "message": "Sets"
   },

@@ -44,6 +44,9 @@
   "updateBtn": {
     "message": "Оновити"
   },
+  "refreshTitle": {
+    "message": "Оновити набори"
+  },
   "snapsHeader": {
     "message": "Набори"
   },

@@ -293,6 +293,21 @@ async function init() {
     event.preventDefault();
     chrome.runtime.openOptionsPage();
   });
+  $("refreshSnaps").addEventListener("click", () => {
+    const btn = $("refreshSnaps");
+    btn.classList.remove("spin");
+    void btn.offsetWidth; // restart the spin on repeated clicks
+    btn.classList.add("spin");
+    refresh();
+  });
+
+  // Named sets live in storage.sync; when Chrome propagates one saved on another
+  // machine, reflect it live instead of only on the next popup open.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "sync" && Object.keys(changes).some((k) => k.startsWith("snap:"))) {
+      refresh();
+    }
+  });
 
   await refresh();
 }
