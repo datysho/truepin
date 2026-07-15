@@ -29,15 +29,12 @@ importScripts("config.js");
 
 const DEFAULTS = {
   autoLockPinned: true,
-  showIcon: true,
   mirrorPinned: true,
   autoSnapshot: true,
   notifyReopen: true,
   iconStyle: "color", // "color" | "mono" (match browser UI)
   language: "auto",
 };
-
-const SCRIPTABLE = /^(https?|file|ftp):/i;
 // Chrome unpins a pinned tab moments before closing it, firing onUpdated
 // {pinned:false} and only then onRemoved. Within this window an unpin does
 // not yet count as "the user removed protection".
@@ -189,12 +186,6 @@ const quiet = (api, ...args) =>
   );
 
 function applyToTab(tabId, state, settings) {
-  chrome.tabs.sendMessage(
-    tabId,
-    { type: "apply", locked: state.protected, showIcon: settings.showIcon },
-    { frameId: 0 },
-    checked,
-  );
   updateAction(tabId, state.protected, settings);
 }
 
@@ -444,30 +435,19 @@ async function rebuildMirror(settings) {
 }
 
 // --- bootstrap -----------------------------------------------------------
-// On install/update the declared content scripts are NOT injected into tabs
-// that are already open. Inject programmatically into everything scriptable.
-async function bootstrapAll(injectScripts) {
+async function bootstrapAll() {
   const settings = await getSettings();
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (tab.id === undefined || tab.id === chrome.tabs.TAB_ID_NONE) continue;
     await refreshTab(tab, settings);
-    if (injectScripts && SCRIPTABLE.test(tab.url || "") && !tab.discarded) {
-      chrome.scripting
-        .executeScript({
-          target: { tabId: tab.id },
-          files: ["content.js"],
-          injectImmediately: true,
-        })
-        .catch(() => {}); // restricted or unloaded pages
-    }
   }
   await rebuildMirror(settings);
   scheduleAutoSnapshot();
 }
 
-chrome.runtime.onInstalled.addListener(() => enqueue(() => bootstrapAll(true), "installed"));
-chrome.runtime.onStartup.addListener(() => enqueue(() => bootstrapAll(false), "startup"));
+chrome.runtime.onInstalled.addListener(() => enqueue(() => bootstrapAll(), "installed"));
+chrome.runtime.onStartup.addListener(() => enqueue(() => bootstrapAll(), "startup"));
 
 // Settings changed (options page) - recompute every tab, reload language.
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -528,23 +508,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type.startsWith("ui:")) {
     enqueue(() => handleUi(request).then(sendResponse), request.type);
     return true;
-  }
-
-  if (!sender.tab || sender.tab.id === undefined || sender.tab.id < 0) return;
-  const tab = sender.tab;
-
-  if (request.type === "hello") {
-    enqueue(async () => {
-      const settings = await getSettings();
-      const state = (await getTabState(tab.id)) || newTabState(tab);
-      state.pinned = !!tab.pinned;
-      if (tabUrl(tab)) state.url = tabUrl(tab);
-      state.protected = computeProtected(state, settings);
-      await putTabState(tab.id, state);
-      updateAction(tab.id, state.protected, settings);
-      sendResponse({ locked: state.protected, showIcon: settings.showIcon });
-    }, "hello");
-    return true; // async sendResponse
   }
 });
 

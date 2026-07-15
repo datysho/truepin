@@ -51,7 +51,7 @@ Pinned tabs form logical groups, and every group is present in every normal wind
 After a `git pull` with changes, hit Reload on the extension card. If the repository folder moves, remove the extension and load it again from the new path.
 
 ## Settings
-Auto-protect pinned tabs (on) - 🔒 in the title (on) - mirror across windows (on) - autosaves (on) - notification on reopen (on) - toolbar icon: color or gray matching the browser UI - language (auto-detect plus manual choice: en, ru, uk, de, fr, es, pt, zh). A manual lock lasts until the browser session ends.
+Auto-protect pinned tabs (on) - mirror across windows (on) - autosaves (on) - notification on reopen (on) - toolbar icon: color or gray matching the browser UI - language (auto-detect plus manual choice: en, ru, uk, de, fr, es, pt, zh). A manual lock lasts until the browser session ends.
 
 ## Support
 TruePin is free and complete - nothing is paywalled, ever.
@@ -62,7 +62,7 @@ TruePin is free and complete - nothing is paywalled, ever.
 - A reopened tab gets a new tab id; for pages without a `chrome.sessions` entry the re-create fallback loses the back/forward history (the page and URL survive).
 
 ## Development
-- `extension/` - MV3: `background.js` (reopen-protection, mirror groups, sets and autosaves), `content.js` (the 🔒 title prefix only), `popup.*` (UI), `options.*`, `i18n.js` + `_locales/` (8 languages), `icons/`.
+- `extension/` - MV3: `background.js` (reopen-protection, mirror groups, sets and autosaves), `popup.*` (UI), `options.*`, `i18n.js` + `_locales/` (8 languages), `icons/`. No content scripts and no host permissions - the protection runs entirely from the service worker via `chrome.tabs`/`chrome.sessions`.
 - Tests: `cd test && npm install && npm test` - e2e on puppeteer against a real Chrome for Testing: 26 scenarios (immortality under every close method, repeated closes, the reopen notification, free reload/navigation, the unpin-then-close path, manual lock carried over to the reopened tab, regular tabs untouched, settings, the global toggle from the popup, the state-driven popup lock (real protection, not the title prefix), snapshot diff-restore, autosave triggers, popup rendering incl. long set names, mirroring across three windows, adoption without duplicates, the ephemeral split-view partner rule, the split-view picker rule (never registered, never resurrected, poisoned autosaves sanitized on read), extension reload without duplicates (simulated; the repro test is proven to fail on the old code), mirror off, localization, a clean service worker log). `HEADFUL=1 npm test` to watch.
 - `test/shot.mjs <out.png>` - a popup screenshot with real data (for UI work).
 - Live diagnostics: `chrome://extensions` - service worker - console, the `__tpDiag` object (job queue and a trace of recent events).

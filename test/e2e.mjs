@@ -248,7 +248,6 @@ async function main() {
     step("pin");
     await setPinned(tab.id, true);
     await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
-    await waitFor("🔒 title", async () => ((await findTab("/one"))?.title || "").startsWith("🔒"));
 
     step("close via tabs.remove");
     const { after } = await closeAndExpectReopen("/one", (t) => removeTab(t.id));
@@ -301,7 +300,7 @@ async function main() {
     await Promise.race([page.evaluate(() => location.reload()).catch(() => {}), sleep(1500)]);
     await waitFor(
       "reloaded and still protected",
-      async () => ((await findTab("/one"))?.title || "").startsWith("🔒"),
+      async () => (await tabState(tab.id))?.protected === true,
     );
     step("navigate to another page");
     await swEval((id, url) => chrome.tabs.update(id, { url }), tab.id, `${baseUrl}/one-nav`);

@@ -1,7 +1,6 @@
 // TruePin - options page. Saves on change, no Save button.
 const DEFAULTS = {
   autoLockPinned: true,
-  showIcon: true,
   mirrorPinned: true,
   autoSnapshot: true,
   notifyReopen: true,
