@@ -1249,6 +1249,55 @@ async function main() {
     }
   });
 
+  await test("popup windows are ignored: the pinned set is never dumped into a popup", async () => {
+    // OAuth popups, window.open popups, app/PWA windows and DevTools are type
+    // "popup"/"app", not "normal". Every fill path uses normalWindows() and
+    // windows.onCreated early-returns for non-normal windows, so a popup must
+    // never receive mirror copies.
+    step("mirror on; a fresh normal window with a pinned tab (a real group)");
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: {
+          autoLockPinned: true,
+          mirrorPinned: true,
+          autoSnapshot: false,
+          notifyReopen: false,
+          lockToFront: "off",
+          language: "auto",
+        },
+      }),
+    );
+    await sleep(700);
+    const normId = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/popup-src" });
+      const [t] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.update(t.id, { pinned: true });
+      return win.id;
+    }, baseUrl);
+    await sleep(2500); // let the pin mirror across the normal windows
+    step("open a POPUP window with its own page");
+    const popupId = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/in-popup", type: "popup" });
+      return win.id;
+    }, baseUrl);
+    await sleep(2500); // give any (wrong) fill every chance to run
+    step("the popup holds only its own tab - no pinned copies were injected");
+    const pinnedInPopup = await swEval(
+      async (id) => (await chrome.tabs.query({ windowId: id, pinned: true })).length,
+      popupId,
+    );
+    assert(pinnedInPopup === 0, `popup got no pinned copies (found ${pinnedInPopup})`);
+    const totalInPopup = await swEval(
+      async (id) => (await chrome.tabs.query({ windowId: id })).length,
+      popupId,
+    );
+    assert(totalInPopup === 1, `popup keeps only its own tab (found ${totalInPopup})`);
+    step("cleanup");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), popupId);
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), normId);
+    await sleep(700);
+  });
+
   await test("mirrorPinned=false: new window stays empty, groups cleared", async () => {
     step("disable mirrorPinned");
     await swEval(() =>

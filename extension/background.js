@@ -882,8 +882,16 @@ function isSplitTab(tab) {
   return tab.splitViewId !== undefined && tab.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE;
 }
 
+// A popup / app / DevTools window is not "normal": the mirror never fills it,
+// and the locked-to-front feature leaves it alone for the same reason.
+async function isNormalWindow(windowId) {
+  const win = await quiet(chrome.windows.get, windowId);
+  return !!win && win.type === "normal" && !win.incognito;
+}
+
 async function moveLockedToFront(tab) {
   if (!tab || tab.pinned || isSplitTab(tab) || tab.windowId === undefined) return;
+  if (!(await isNormalWindow(tab.windowId))) return;
   const pinned = (await quiet(chrome.tabs.query, { windowId: tab.windowId, pinned: true })) || [];
   await quiet(chrome.tabs.move, tab.id, { index: pinned.length });
 }
@@ -894,6 +902,7 @@ async function moveLockedToFront(tab) {
 async function enforceLockedFront(windowId) {
   const settings = await getSettings();
   if (settings.lockToFront !== "always") return;
+  if (!(await isNormalWindow(windowId))) return;
   const tabs = (await quiet(chrome.tabs.query, { windowId })) || [];
   const pinnedCount = tabs.filter((t) => t.pinned).length;
   const locked = [];

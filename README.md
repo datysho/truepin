@@ -9,7 +9,7 @@
 <p>
   <img src="https://img.shields.io/badge/Chrome-Manifest_V3-2563eb?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-2563eb?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/version-3.7.5-2563eb?style=flat-square" alt="version 3.7.5">
+  <img src="https://img.shields.io/badge/version-3.7.6-2563eb?style=flat-square" alt="version 3.7.6">
   <img src="https://img.shields.io/badge/network-none-16a34a?style=flat-square" alt="no network requests">
   <img src="https://img.shields.io/badge/languages-8-2563eb?style=flat-square" alt="8 languages">
 </p>
@@ -176,7 +176,7 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - `i18n.js` + `_locales/` - 8 languages
 - `icons/`
 
-**Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 32 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, locked tabs pulled to the front, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
+**Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 33 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, popup windows never filled, locked tabs pulled to the front, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
 
 ```bash
 cd test && npm install && npm test   # HEADFUL=1 npm test to watch
