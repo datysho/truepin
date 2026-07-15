@@ -26,17 +26,6 @@
 
 importScripts("i18n.js");
 importScripts("config.js");
-// Voluntary support (ExtensionPay): dormant until TP_EXTPAY_ID is set in
-// config.js. extpay.js is the official client, vendored unmodified
-// (LGPL-3.0); startBackground() is required by ExtPay's payment flow.
-if (typeof TP_EXTPAY_ID !== "undefined" && TP_EXTPAY_ID) {
-  try {
-    importScripts("extpay.js");
-    ExtPay(TP_EXTPAY_ID).startBackground();
-  } catch (err) {
-    console.warn("[truepin] extpay init failed", err);
-  }
-}
 
 const DEFAULTS = {
   autoLockPinned: true,

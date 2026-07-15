@@ -195,15 +195,6 @@
         border-color: transparent;
       }
 
-      .support-row {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-      }
-      .support-row > span:first-child {
-        flex: 1;
-        font-weight: 500;
-      }
       button {
         font: inherit;
         font-weight: 500;
@@ -335,22 +326,6 @@
           </label>
         </div>
 
-        <div class="setting" id="supportSection" hidden>
-          <div class="support-row">
-            <span data-i18n="supportHeader"></span>
-            <button id="supportBtn" data-i18n="supportBtn"></button>
-          </div>
-          <p class="hint" data-i18n="supportHint"></p>
-          <p class="hint" id="supportThanks" hidden>
-            <span data-i18n="supportThanks"></span>
-            <a
-              id="supportListLink"
-              href="https://github.com/datysho/truepin/issues/new?title=Add%20me%20to%20SUPPORTERS&body=Name%20or%20handle%20to%20list%3A%0A%0ALink%20(optional)%3A"
-              target="_blank"
-              data-i18n="supportList"
-            ></a>
-          </p>
-        </div>
       </div>
 
       <p id="saved" data-i18n="saved"></p>
@@ -358,7 +333,6 @@
     </div>
 
     <script src="config.js"></script>
-    <script src="extpay.js"></script>
     <script src="i18n.js"></script>
     <script src="options.js"></script>
   </body>

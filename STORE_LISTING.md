@@ -83,11 +83,3 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
   rate/review button, then publish an update.
 - When a PayPal.me handle is available, set `TP_PAYPAL_URL` (config.js) to light
   up the donate button.
-
-## Note on ExtensionPay
-
-`extpay.js` is bundled but dormant (no `TP_EXTPAY_ID`), so no payment flow and no
-network calls occur. A content script is declared on `extensionpay.com` per the
-ExtensionPay integration. If a reviewer questions unused code, the scaffolding
-can be removed from the store build and re-added when voluntary support goes
-live.
