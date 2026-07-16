@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "Notificar cuando vuelva una pestaña protegida"
   },
+  "optNavRedirect": {
+    "message": "Escribir una dirección en una pestaña protegida abre una pestaña nueva"
+  },
+  "optNavRedirectHint": {
+    "message": "La pestaña protegida vuelve a su página; la dirección escrita o la búsqueda se abre al lado. Los enlaces, las recargas y la navegación interna no se ven afectados."
+  },
+  "optLinkRedirect": {
+    "message": "Los enlaces a otro sitio se abren en una pestaña nueva"
+  },
+  "optLinkRedirectHint": {
+    "message": "Solo en pestañas protegidas y solo cuando el enlace lleva a un sitio claramente distinto. Los inicios de sesión que deben volver a la página funcionan mejor con esto desactivado."
+  },
+  "optDiag": {
+    "message": "Copiar diagnóstico"
+  },
+  "optDiagCopied": {
+    "message": "Copiado: pégalo en tu mensaje"
+  },
   "notifReopenedPinned": {
     "message": "Las pestañas fijadas no se cierran. Desfíjala para cerrarla."
   },

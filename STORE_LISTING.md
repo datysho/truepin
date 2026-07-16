@@ -50,6 +50,8 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
   - tabs - detect pinned tabs, notice closes, reopen them, mirror across windows.
   - storage - save settings, autosaves (local) and named sets (synced).
   - sessions - silently reopen a just-closed protected tab.
+  - webNavigation - notice address-bar or cross-site navigation in a protected
+    tab so it opens in a new tab instead; processed locally.
   - notifications - optionally notify when a protected tab is restored.
   - favicon - show tab icons in the popup list.
 - **Remote code:** No - all code is bundled in the package.

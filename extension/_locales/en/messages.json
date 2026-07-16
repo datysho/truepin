@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "Notify when a protected tab is brought back"
   },
+  "optNavRedirect": {
+    "message": "Typing an address in a protected tab opens a new tab"
+  },
+  "optNavRedirectHint": {
+    "message": "The protected tab snaps back to its page; the typed address or search opens next to it. Links, reloads and in-page navigation are not affected."
+  },
+  "optLinkRedirect": {
+    "message": "Links to a different site open in a new tab"
+  },
+  "optLinkRedirectHint": {
+    "message": "In protected tabs only, and only when the link leads to a clearly different site. Sign-in flows that need to return to the page work best with this off."
+  },
+  "optDiag": {
+    "message": "Copy diagnostics"
+  },
+  "optDiagCopied": {
+    "message": "Copied - paste it into your report"
+  },
   "notifReopenedPinned": {
     "message": "Pinned tabs don't close. Unpin to close."
   },

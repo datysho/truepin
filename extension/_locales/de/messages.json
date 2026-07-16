@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "Benachrichtigen, wenn ein geschützter Tab zurückkommt"
   },
+  "optNavRedirect": {
+    "message": "Eine Adresseingabe in einem geschützten Tab öffnet einen neuen Tab"
+  },
+  "optNavRedirectHint": {
+    "message": "Der geschützte Tab springt auf seine Seite zurück; die eingegebene Adresse oder Suche öffnet sich daneben. Links, Neuladen und Navigation innerhalb der Seite bleiben unberührt."
+  },
+  "optLinkRedirect": {
+    "message": "Links zu einer anderen Website öffnen sich in einem neuen Tab"
+  },
+  "optLinkRedirectHint": {
+    "message": "Nur in geschützten Tabs und nur, wenn der Link zu einer klar anderen Website führt. Anmeldeabläufe, die zur Seite zurückkehren müssen, funktionieren am besten, wenn dies aus ist."
+  },
+  "optDiag": {
+    "message": "Diagnose kopieren"
+  },
+  "optDiagCopied": {
+    "message": "Kopiert - in die Meldung einfügen"
+  },
   "notifReopenedPinned": {
     "message": "Angepinnte Tabs schließen nicht. Zum Schließen lösen."
   },

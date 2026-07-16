@@ -1449,6 +1449,313 @@ async function main() {
     await sleep(500);
   });
 
+  // ---- navigation redirect (v3.9.0) ---------------------------------------
+
+  await test("nav redirect: address-bar nav in a protected tab forks to a new tab", async () => {
+    step("pin a page");
+    const { tab } = await openPage("/navsrc");
+    await setPinned(tab.id, true);
+    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+    await sleep(900); // mirror settles
+    const before = await swEval(async () => (await chrome.tabs.query({})).length);
+    const dest = `${baseUrl}/navdest`;
+
+    step("try a real CDP typed navigation first");
+    let drove = "cdp";
+    let forked = null;
+    const pages = await browser.pages();
+    const page = pages.find((p) => p.url().includes("/navsrc"));
+    if (page) {
+      try {
+        const cdp = await page.createCDPSession();
+        await cdp.send("Page.navigate", { url: dest, transitionType: "typed" });
+        forked = await waitFor("fork appeared (cdp)", async () => findTab("/navdest"), 4000, 200);
+      } catch {
+        forked = null;
+      }
+    }
+    if (!forked) {
+      step("CDP transition did not map - drive the production hook");
+      drove = "hook";
+      const kind = await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: dest,
+        frameId: 0,
+        transitionType: "typed",
+        transitionQualifiers: ["from_address_bar"],
+        documentLifecycle: "active",
+      });
+      assert(kind === "address", `hook classified as address (got ${kind})`);
+      forked = await waitFor("fork appeared (hook)", async () => findTab("/navdest"), 5000, 200);
+    }
+
+    step(`forked via ${drove}: destination in a NEW regular tab, source restored`);
+    assert(forked.id !== tab.id, "destination lives in a new tab");
+    assert(!forked.pinned, "fork is a regular, unprotected tab");
+    const src = await waitFor(
+      "source back on its page, same tab id, still pinned",
+      async () =>
+        swEval(async (id) => {
+          const t = await new Promise((resolve) =>
+            chrome.tabs.get(id, (x) => {
+              void chrome.runtime.lastError;
+              resolve(x || null);
+            }),
+          );
+          const url = t && (t.url || t.pendingUrl || "");
+          return t && t.pinned && url.includes("/navsrc") ? { id: t.id } : null;
+        }, tab.id),
+      6000,
+      250,
+    );
+    assert(src.id === tab.id, "source kept its tab id (no reopen)");
+
+    step("no cascade: exactly one tab added");
+    await sleep(1500);
+    const after = await swEval(async () => (await chrome.tabs.query({})).length);
+    assert(after === before + 1, `one tab added (was ${before}, now ${after})`);
+
+    step("cleanup");
+    await removeTab(forked.id);
+    await setPinned(tab.id, false);
+    await sleep(1600);
+    await removeTab(tab.id);
+    await sleep(400);
+  });
+
+  await test("nav redirect: manually locked regular tab forks too, lock survives", async () => {
+    const { tab } = await openPage("/locknav");
+    await swEval((id) => globalThis.truePinToggle(id), tab.id);
+    await waitFor("locked", async () => (await tabState(tab.id))?.manual === true);
+    const dest = `${baseUrl}/lockdest`;
+    const kind = await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+      tabId: tab.id,
+      url: dest,
+      frameId: 0,
+      transitionType: "generated",
+      transitionQualifiers: ["from_address_bar"],
+      documentLifecycle: "active",
+    });
+    assert(kind === "address", `omnibox search classified as address (got ${kind})`);
+    const forked = await waitFor("fork appeared", async () => findTab("/lockdest"), 5000, 200);
+    assert(forked.id !== tab.id, "destination in a new tab");
+    const state = await tabState(tab.id);
+    assert(state && state.manual === true, "manual lock survives on the same tab id");
+    step("cleanup");
+    await swEval((r) => globalThis.__tpUiCall(r), { type: "ui:clearLock", tabId: tab.id });
+    await sleep(400);
+    await removeTab(forked.id);
+    await removeTab(tab.id);
+    await sleep(400);
+  });
+
+  await test("nav redirect: classifier ignores reloads, back/forward, prerender, subframes, redirects", async () => {
+    const { tab } = await openPage("/navneg");
+    await setPinned(tab.id, true);
+    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+    await sleep(900);
+    const count0 = await swEval(async () => (await chrome.tabs.query({})).length);
+    const cases = [
+      ["reload from address bar (same-url retype)", { transitionType: "reload", transitionQualifiers: ["from_address_bar"] }],
+      ["back/forward re-reporting typed", { transitionType: "typed", transitionQualifiers: ["forward_back"] }],
+      ["prerender commit", { transitionType: "typed", transitionQualifiers: ["from_address_bar"], documentLifecycle: "prerender" }],
+      ["subframe commit", { transitionType: "typed", transitionQualifiers: ["from_address_bar"], frameId: 7 }],
+      ["JS redirect dressed as link", { transitionType: "link", transitionQualifiers: ["client_redirect"] }],
+      ["server redirect link", { transitionType: "link", transitionQualifiers: ["server_redirect"] }],
+    ];
+    for (const [name, d] of cases) {
+      const kind = await swEval((details) => globalThis.__tpSimulateNavCommit(details), {
+        tabId: tab.id,
+        url: "http://example.com/x",
+        frameId: d.frameId ?? 0,
+        transitionType: d.transitionType,
+        transitionQualifiers: d.transitionQualifiers,
+        documentLifecycle: d.documentLifecycle || "active",
+      });
+      assert(kind === null, `${name}: not intercepted (got ${kind})`);
+    }
+    await sleep(1000);
+    const count1 = await swEval(async () => (await chrome.tabs.query({})).length);
+    assert(count1 === count0, "no tabs created by any ignored case");
+    step("cleanup");
+    await setPinned(tab.id, false);
+    await sleep(1600);
+    await removeTab(tab.id);
+    await sleep(400);
+  });
+
+  await test("nav redirect: cross-site link forks; same-site link and disabled toggles stay put", async () => {
+    const writeSettings = (extra) =>
+      swEval(
+        (s) => chrome.storage.sync.set({ settings: s }),
+        {
+          autoLockPinned: true,
+          mirrorPinned: true,
+          autoSnapshot: true,
+          notifyReopen: true,
+          navRedirect: true,
+          linkRedirect: true,
+          language: "auto",
+          ...extra,
+        },
+      );
+    const { tab } = await openPage("/linksrc");
+    await setPinned(tab.id, true);
+    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+    await sleep(900);
+    const crossBase = baseUrl.replace("127.0.0.1", "localhost");
+
+    try {
+      step("cross-site link (127.0.0.1 -> localhost) forks");
+      const kind = await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: `${crossBase}/linkdest`,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: [],
+        documentLifecycle: "active",
+      });
+      assert(kind === "link", `classified as link (got ${kind})`);
+      const forked = await waitFor("cross-site fork appeared", async () => findTab("/linkdest"), 5000, 200);
+      assert(forked.id !== tab.id && !forked.pinned, "fork is a new regular tab");
+      await removeTab(forked.id);
+      await sleep(300);
+
+      step("same-site link stays in place");
+      await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: `${baseUrl}/samesite`,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: [],
+        documentLifecycle: "active",
+      });
+      await sleep(1000);
+      assert(!(await findTab("/samesite")), "no fork for a same-site link");
+
+      step("linkRedirect=false: cross-site link stays");
+      await writeSettings({ linkRedirect: false });
+      await sleep(600);
+      await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: `${crossBase}/linkoff`,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: [],
+        documentLifecycle: "active",
+      });
+      await sleep(1000);
+      assert(!(await findTab("/linkoff")), "no fork with the link toggle off");
+
+      step("navRedirect=false: typed nav stays");
+      await writeSettings({ navRedirect: false });
+      await sleep(600);
+      await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: `${crossBase}/typedoff`,
+        frameId: 0,
+        transitionType: "typed",
+        transitionQualifiers: ["from_address_bar"],
+        documentLifecycle: "active",
+      });
+      await sleep(1000);
+      assert(!(await findTab("/typedoff")), "no fork with the address toggle off");
+
+      step("unprotected regular tab: typed nav stays");
+      await writeSettings({});
+      await sleep(600);
+      const plain = await openPage("/plainnav");
+      await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: plain.tab.id,
+        url: `${crossBase}/plaindest`,
+        frameId: 0,
+        transitionType: "typed",
+        transitionQualifiers: ["from_address_bar"],
+        documentLifecycle: "active",
+      });
+      await sleep(1000);
+      assert(!(await findTab("/plaindest")), "no fork on an unprotected tab");
+      await removeTab(plain.tab.id);
+    } finally {
+      await writeSettings({});
+      await sleep(400);
+    }
+    step("cleanup");
+    await setPinned(tab.id, false);
+    await sleep(1600);
+    await removeTab(tab.id);
+    await sleep(400);
+  });
+
+  await test("nav redirect: breaker refusal leaves the navigation alone", async () => {
+    const { tab } = await openPage("/brknav");
+    await setPinned(tab.id, true);
+    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+    await sleep(900);
+    try {
+      step("exhaust the creation ledger");
+      await swEval(async () => {
+        const now = Date.now();
+        await chrome.storage.session.set({ createLedger: Array.from({ length: 25 }, () => now) });
+      });
+      const kind = await swEval((d) => globalThis.__tpSimulateNavCommit(d), {
+        tabId: tab.id,
+        url: `${baseUrl.replace("127.0.0.1", "localhost")}/brkdest`,
+        frameId: 0,
+        transitionType: "typed",
+        transitionQualifiers: ["from_address_bar"],
+        documentLifecycle: "active",
+      });
+      assert(kind === "address", "still classified");
+      await sleep(1200);
+      assert(!(await findTab("/brkdest")), "breaker refused the fork; nothing was created");
+    } finally {
+      await swEval(() => chrome.storage.session.set({ createLedger: [] }));
+    }
+    step("cleanup");
+    await setPinned(tab.id, false);
+    await sleep(1600);
+    await removeTab(tab.id);
+    await sleep(400);
+  });
+
+  await test("canon: survives a window-death write, empties on an explicit dissolve", async () => {
+    step("pin a page so the canon is non-empty");
+    const w = await swEval(async (b) => {
+      const win = await chrome.windows.create({ url: b + "/canonlife" });
+      await new Promise((r) => setTimeout(r, 700));
+      const [t] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.update(t.id, { pinned: true });
+      return win.id;
+    }, baseUrl);
+    const canonUrls = () =>
+      swEval(
+        async () => ((await chrome.storage.local.get("canonLayout")).canonLayout || {}).urls || [],
+      );
+    await waitFor("canon carries the page", async () =>
+      (await canonUrls()).some((u) => u.includes("canonlife")),
+    );
+    step("an empty write with preserveCanon (window death) keeps the canon");
+    await swEval(() => putMirror({ groups: {}, order: [], pending: [] }, { preserveCanon: true }));
+    assert((await canonUrls()).length > 0, "canon survived the window-death write");
+    step("an empty write without the flag (explicit dissolve) clears it");
+    await swEval(() => putMirror({ groups: {}, order: [], pending: [] }));
+    assert((await canonUrls()).length === 0, "canon cleared on dissolve semantics");
+    step("cleanup: rebuild the live mirror, then retire the test pin");
+    await swEval(() => globalThis.__tpSimulateReload());
+    await sleep(4500);
+    for (let i = 0; i < 8; i++) {
+      const t = await findTab("/canonlife");
+      if (!t) break;
+      await setPinned(t.id, false);
+      await sleep(1200);
+      await removeTab(t.id);
+      await sleep(300);
+    }
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w);
+    await sleep(500);
+  });
+
   await test("circuit breaker: a creation storm is capped, never unbounded", async () => {
     step("hammer the token ledger with no allowance");
     const res = await swEval(async () => {

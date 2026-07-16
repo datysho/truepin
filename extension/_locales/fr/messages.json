@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "Notifier quand un onglet protégé revient"
   },
+  "optNavRedirect": {
+    "message": "Saisir une adresse dans un onglet protégé ouvre un nouvel onglet"
+  },
+  "optNavRedirectHint": {
+    "message": "L'onglet protégé revient à sa page ; l'adresse saisie ou la recherche s'ouvre à côté. Les liens, rechargements et la navigation interne ne sont pas concernés."
+  },
+  "optLinkRedirect": {
+    "message": "Les liens vers un autre site s'ouvrent dans un nouvel onglet"
+  },
+  "optLinkRedirectHint": {
+    "message": "Uniquement dans les onglets protégés et seulement si le lien mène vers un site clairement différent. Les connexions qui doivent revenir à la page fonctionnent mieux avec cette option désactivée."
+  },
+  "optDiag": {
+    "message": "Copier le diagnostic"
+  },
+  "optDiagCopied": {
+    "message": "Copié - collez-le dans votre message"
+  },
   "notifReopenedPinned": {
     "message": "Les onglets épinglés ne se ferment pas. Désépinglez pour fermer."
   },

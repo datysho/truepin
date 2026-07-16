@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "Notificar quando uma aba protegida voltar"
   },
+  "optNavRedirect": {
+    "message": "Digitar um endereço em uma guia protegida abre uma nova guia"
+  },
+  "optNavRedirectHint": {
+    "message": "A guia protegida volta à sua página; o endereço digitado ou a busca abre ao lado. Links, recarregamentos e navegação interna não são afetados."
+  },
+  "optLinkRedirect": {
+    "message": "Links para outro site abrem em uma nova guia"
+  },
+  "optLinkRedirectHint": {
+    "message": "Apenas em guias protegidas e somente quando o link leva a um site claramente diferente. Fluxos de login que precisam voltar à página funcionam melhor com isso desligado."
+  },
+  "optDiag": {
+    "message": "Copiar diagnóstico"
+  },
+  "optDiagCopied": {
+    "message": "Copiado - cole na sua mensagem"
+  },
   "notifReopenedPinned": {
     "message": "Abas fixadas não fecham. Desafixe para fechar."
   },

@@ -241,6 +241,22 @@
         font-size: 12px;
         margin: 20px 0 0;
       }
+      .linklike {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: var(--muted);
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .linklike:hover {
+        color: var(--fg);
+      }
+      #diagCopied {
+        color: var(--ok);
+        margin-left: 6px;
+      }
     </style>
   </head>
   <body>
@@ -279,6 +295,22 @@
             <span data-i18n="optNotify"></span>
             <input type="checkbox" id="notifyReopen" class="switch" />
           </label>
+        </div>
+
+        <div class="setting">
+          <label>
+            <span data-i18n="optNavRedirect"></span>
+            <input type="checkbox" id="navRedirect" class="switch" />
+          </label>
+          <p class="hint" data-i18n="optNavRedirectHint"></p>
+        </div>
+
+        <div class="setting">
+          <label>
+            <span data-i18n="optLinkRedirect"></span>
+            <input type="checkbox" id="linkRedirect" class="switch" />
+          </label>
+          <p class="hint" data-i18n="optLinkRedirectHint"></p>
         </div>
 
         <div class="setting">
@@ -333,6 +365,10 @@
       </div>
 
       <p id="saved" data-i18n="saved"></p>
+      <p class="ver">
+        <button id="diagBtn" class="linklike" data-i18n="optDiag"></button>
+        <span id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
+      </p>
       <p class="ver" id="version"></p>
     </div>
 

@@ -47,6 +47,8 @@ const DEFAULTS = {
   mirrorPinned: true,
   autoSnapshot: true,
   notifyReopen: true,
+  navRedirect: true, // address-bar navigation in a protected tab forks to a new tab
+  linkRedirect: true, // cross-site link clicks in a protected tab fork to a new tab
   iconStyle: "color", // "color" | "mono" (match browser UI)
   lockToFront: "off", // "off" | "onLock" | "always" - pull locked regular tabs to the front
   language: "auto",
@@ -73,6 +75,10 @@ const CREATE_BURST = 25;
 // An engine-made copy of a page is never re-created in the same window twice
 // in a row: mirror loops always re-create the same page in the same window.
 const COPY_COOLDOWN_MS = 20 * 1000;
+// After forking an intercepted navigation into a new tab, the protected tab
+// must be back on its page within this window, or the goBack is presumed
+// missed (no history entry) and the url is restored explicitly.
+const NAV_REDIRECT_VERIFY_MS = 500;
 
 // --- serialized state mutations ----------------------------------------
 let queueTail = Promise.resolve();
@@ -177,6 +183,7 @@ function newTabState(tab) {
     protected: false,
     pinned: !!(tab && tab.pinned),
     url: tabUrl(tab),
+    prevUrl: null,
     unpinnedAt: null,
   };
 }
@@ -261,7 +268,7 @@ async function getMirror() {
   return { groups, order: groupOrder, pending: pendingCreates };
 }
 
-async function putMirror(mirror) {
+async function putMirror(mirror, { preserveCanon = false } = {}) {
   await chrome.storage.session.set({
     groups: mirror.groups,
     groupOrder: mirror.order,
@@ -272,8 +279,10 @@ async function putMirror(mirror) {
   // settled mirror: while the bootstrap is still reconstructing groups the
   // mirror is legitimately empty or partial, and writing that through would
   // erase exactly the truth the bootstrap needs. Once live, the canon
-  // tracks every change - including down to empty (the last unpin, the
-  // close of the last pinned window's group by the user).
+  // tracks every change - down to empty on the last unpin. A window-close
+  // is the one death that must NOT empty it (preserveCanon): the session
+  // will restore those tabs and the canon has to be waiting for them, or
+  // the next start re-crystallizes over whatever the restore drags in.
   const { mirrorReady } = await chrome.storage.session.get("mirrorReady");
   if (!mirrorReady) return;
   const urls = mirror.order
@@ -281,14 +290,18 @@ async function putMirror(mirror) {
     .filter((url) => url && !isEphemeralUrl(url));
   if (urls.length) {
     await chrome.storage.local.set({ [CANON_KEY]: { urls, savedAt: Date.now() } });
-  } else {
+  } else if (!preserveCanon) {
     await clearCanon();
   }
 }
 
 async function getCanon() {
   const { [CANON_KEY]: canon } = await chrome.storage.local.get(CANON_KEY);
-  return canon && Array.isArray(canon.urls) ? canon.urls.filter((u) => !isEphemeralUrl(u)) : [];
+  const urls =
+    canon && Array.isArray(canon.urls) ? canon.urls.filter((u) => !isEphemeralUrl(u)) : [];
+  // Two identical entries in the canon are always a disease - they would
+  // materialize as a visible duplicate pin on every start. Drop at read.
+  return [...new Set(urls)];
 }
 
 // The canon empties only through explicit user acts (the last unpin, a
@@ -566,7 +579,34 @@ async function rebuildMirror(settings) {
     await convergeToCanon(canon, settings);
     return;
   }
-  // No canon to converge to (first run, or explicitly emptied) or a live
+  if (cold) {
+    // Cold start with no canon (update from a pre-canon version, or a canon
+    // lost some other way). The most recently focused window with pins IS
+    // the set: crystallize the canon from it and converge everything with
+    // the same engine as every other start. Never adopt-and-fan-out
+    // whatever lies around - drift residue (chat copies on unique paths)
+    // multiplies exactly there. The one exception is a FRESH INSTALL: the
+    // user's pins across windows all predate us and are all intent - adopt
+    // them additively, close nothing.
+    const { freshInstall } = await chrome.storage.session.get("freshInstall");
+    if (!freshInstall) {
+      const authWindowId = await pinnedHomeWindow();
+      if (authWindowId !== null) {
+        const authPins = (await pinnedTabsOf(authWindowId)).filter(
+          (t) => !isEphemeralUrl(tabUrl(t)),
+        );
+        if (authPins.length) {
+          traceDiag(`crystallize canon from win=${authWindowId}: ${authPins.length} pins`);
+          await convergeToCanon(
+            authPins.map((t) => tabUrl(t)),
+            settings,
+          );
+        }
+      }
+      return;
+    }
+  }
+  // Fresh install, or a mid-session rebuild (settings change) over a live
   // mirror: adopt what exists and fill gaps, without closing anything; the
   // canon keeps tracking the mirror.
   for (const w of await normalWindows()) {
@@ -600,6 +640,12 @@ async function convergeToCanon(canon, settings) {
   for (const record of strays.values()) {
     if (record.count === 1) target.push(record.url);
   }
+  // Same-origin multiplicity in the canon is legal (two Notion pages) but it
+  // is also what drift disease looks like - leave a trace for diagnostics.
+  const byOrigin = new Map();
+  for (const u of target) byOrigin.set(originKey(u), (byOrigin.get(originKey(u)) || 0) + 1);
+  const multi = [...byOrigin.entries()].filter(([, n]) => n > 1);
+  if (multi.length) traceDiag(`converge: same-origin canon multiplicity ${JSON.stringify(multi)}`);
   const authWindowId = (await pinnedHomeWindow()) ?? (windows[0] && windows[0].id);
   if (authWindowId === undefined) return;
   await applyCanonicalSet(target, authWindowId, settings, { loose: true });
@@ -674,7 +720,18 @@ async function bootstrapAll() {
   scheduleAutoSnapshot();
 }
 
-chrome.runtime.onInstalled.addListener(() => ensureColdBootstrap());
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details && details.reason === "install") {
+    // Fresh install: the crystallization below must adopt additively, not
+    // converge (nothing that exists is our residue - it is all user intent).
+    chrome.storage.session.set({ freshInstall: true }, () => {
+      void chrome.runtime.lastError;
+      ensureColdBootstrap();
+    });
+    return;
+  }
+  ensureColdBootstrap();
+});
 chrome.runtime.onStartup.addListener(() => ensureColdBootstrap());
 
 // Settings changed (options page) - recompute every tab, reload language.
@@ -888,6 +945,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const state = (await getTabState(tabId)) || newTabState(tab);
     const priorUrl = state.url;
     state.pinned = !!tab.pinned;
+    if (tabUrl(tab) && tabUrl(tab) !== priorUrl) state.prevUrl = priorUrl;
     if (tabUrl(tab)) state.url = tabUrl(tab);
     state.protected = computeProtected(state, settings);
     if (changeInfo.pinned === false) {
@@ -934,6 +992,110 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
   }, "updated");
 });
+
+// --- navigation redirect ----------------------------------------------------
+// A protected tab keeps its page. An address-bar navigation (typed URL or
+// search), or a link click leading to a clearly different site, forks into a
+// new tab and the protected tab goes back to where it was. Reloads, same-site
+// links, JS/server redirects (OAuth chains), and back/forward stay in place.
+// MV3 has no true cancel: the navigation commits, then snaps back - a brief
+// flash, documented in the README.
+
+// Registrable domain (eTLD+1) approximation without a public-suffix list:
+// last two host labels, or three when the second-to-last is a well-known
+// second-level TLD label. IP literals compare whole.
+const KNOWN_SLD = new Set(["co", "com", "net", "org", "gov", "ac", "edu"]);
+function registrableDomain(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    if (/^[\d.]+$/.test(host) || host.includes(":")) return host;
+    const parts = host.split(".");
+    if (parts.length <= 2) return host;
+    const take = KNOWN_SLD.has(parts[parts.length - 2]) ? 3 : 2;
+    return parts.slice(-take).join(".");
+  } catch {
+    return url || "";
+  }
+}
+
+// Classify a webNavigation commit: "address" (omnibox act), "link" (real
+// in-page click), or null (everything that must stay untouched).
+function redirectKind(details) {
+  if (details.frameId !== 0) return null;
+  // Speculative (prerender) commits are not user acts.
+  if (details.documentLifecycle && details.documentLifecycle !== "active") return null;
+  const qualifiers = details.transitionQualifiers || [];
+  // A back/forward commit re-reports the history entry's ORIGINAL transition
+  // type (our own goBack included) - never a fresh user act.
+  if (qualifiers.includes("forward_back")) return null;
+  // Retyping the current URL commits as a reload; reloads stay in place.
+  if (details.transitionType === "reload") return null;
+  if (
+    qualifiers.includes("from_address_bar") ||
+    // Chromium forks with custom address bars can omit the qualifier.
+    ["typed", "generated", "keyword"].includes(details.transitionType)
+  ) {
+    return "address";
+  }
+  // Only real clicks: JS and server redirects carry qualifiers and must pass
+  // (breaking an OAuth chain mid-flight helps nobody).
+  if (
+    details.transitionType === "link" &&
+    !qualifiers.includes("client_redirect") &&
+    !qualifiers.includes("server_redirect")
+  ) {
+    return "link";
+  }
+  return null;
+}
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  const kind = redirectKind(details);
+  if (!kind) return;
+  enqueue(() => navRedirect(details.tabId, details.url, kind), "nav-redirect");
+});
+
+async function navRedirect(tabId, url, kind) {
+  const settings = await getSettings();
+  if (kind === "address" ? !settings.navRedirect : !settings.linkRedirect) return;
+  const state = await getTabState(tabId);
+  if (!state || !state.protected) return;
+  // Our onUpdated job may or may not have run first (event delivery order is
+  // not guaranteed); both orders resolve to the pre-navigation url.
+  const restoreUrl = state.url && state.url !== url ? state.url : state.prevUrl;
+  if (!restoreUrl || restoreUrl === url || isEphemeralUrl(restoreUrl)) return;
+  // Links fork only when the destination is a clearly different site.
+  if (kind === "link" && registrableDomain(restoreUrl) === registrableDomain(url)) return;
+  const tab = await quiet(chrome.tabs.get, tabId);
+  if (!tab) return;
+  // New tab FIRST: if the breaker refuses, the in-place navigation stands -
+  // the typed destination is never lost.
+  const created = await guardedCreate(
+    { windowId: tab.windowId, url, active: true, openerTabId: tabId },
+    `nav-redirect ${pathKey(url)}`,
+    false,
+  );
+  if (!created) return;
+  await quiet(chrome.tabs.goBack, tabId); // BFCache keeps the page state alive
+  scheduleNavRestoreVerify(tabId, restoreUrl);
+  traceDiag(
+    `nav-redirect (${kind}) tab=${tabId}: ${pathKey(url)} -> tab ${created.id}, back to ${pathKey(restoreUrl)}`,
+  );
+}
+
+// Off-queue wait (pattern: scheduleUnpinConfirm) - never block the FIFO.
+function scheduleNavRestoreVerify(tabId, restoreUrl) {
+  setTimeout(() => {
+    enqueue(async () => {
+      const tab = await quiet(chrome.tabs.get, tabId);
+      if (!tab) return;
+      // Done, or the back-commit is still in flight - do not double-fire.
+      if (tab.url === restoreUrl || tab.pendingUrl === restoreUrl) return;
+      traceDiag(`nav-redirect verify: goBack missed, forcing ${pathKey(restoreUrl)}`);
+      await quiet(chrome.tabs.update, tabId, { url: restoreUrl });
+    }, "nav-redirect-verify");
+  }, NAV_REDIRECT_VERIFY_MS);
+}
 
 // A real unpin (tab still alive after the grace) dissolves its group:
 // the unpinned tab stays as a regular tab, its copies elsewhere close.
@@ -994,7 +1156,8 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
         delete mirror.groups[gid];
         mirror.order = mirror.order.filter((g) => g !== gid);
       }
-      await putMirror(mirror);
+      // A window-level death never empties the canon - only explicit unpins do.
+      await putMirror(mirror, { preserveCanon: !!removeInfo.isWindowClosing });
     };
 
     // Closed by the extension itself: bookkeeping only.
@@ -1491,6 +1654,20 @@ async function applyCanonicalSet(urls, authWindowId, settings, { loose = false }
         }
       }
     }
+    // The outcome of a canonical apply IS the canon, by definition, for both
+    // callers: a restore is user truth, a startup converge is the persisted
+    // truth re-asserted. Written directly - the putMirror ready-gate rightly
+    // blocks canon writes DURING the bootstrap, but this one must land, or
+    // the canon sits empty after a cold converge until the first live event,
+    // and a restore-shaped straggler in that window can still mint and fan
+    // out.
+    const outcome = await getMirror();
+    const canonUrls = outcome.order
+      .map((gid) => outcome.groups[gid] && outcome.groups[gid].url)
+      .filter((url) => url && !isEphemeralUrl(url));
+    if (canonUrls.length) {
+      await chrome.storage.local.set({ [CANON_KEY]: { urls: canonUrls, savedAt: Date.now() } });
+    }
     scheduleAutoSnapshot();
     return stats;
   });
@@ -1617,6 +1794,13 @@ globalThis.truePinToggle = async (tabId) => {
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
+// Test hook: drive a synthetic webNavigation commit through the production
+// classifier and job (puppeteer cannot type into the real omnibox).
+globalThis.__tpSimulateNavCommit = (details) => {
+  const kind = redirectKind(details);
+  if (kind) enqueue(() => navRedirect(details.tabId, details.url, kind), "nav-redirect-test");
+  return kind;
+};
 // Test hook: what a chrome://extensions Reload does to our state - the SW
 // restarts with storage.session wiped and runs the install bootstrap.
 globalThis.__tpSimulateReload = () => {
@@ -1733,6 +1917,42 @@ async function handleUi(request) {
       // The popup's toggle on a pinned tab drives the GLOBAL auto-protection.
       await chrome.storage.sync.set({ settings: { ...settings, autoLockPinned: !!request.on } });
       return { ok: true };
+    }
+    case "ui:diagnostics": {
+      // One-click state dump for the options page: everything needed to
+      // diagnose a duplication or convergence report, nothing personal
+      // beyond what the popup already shows. Stays local - the user decides
+      // where the clipboard goes.
+      const [canon, mirror, windows, session] = await Promise.all([
+        getCanon(),
+        getMirror(),
+        chrome.windows.getAll({ populate: true }),
+        chrome.storage.session.get(["createLedger", "mirrorReady", "selfClosed"]),
+      ]);
+      return {
+        version: chrome.runtime.getManifest().version,
+        settings,
+        canon,
+        groups: mirror.order.map((gid) => ({
+          gid,
+          url: mirror.groups[gid] && mirror.groups[gid].url,
+          members: mirror.groups[gid] && mirror.groups[gid].members,
+        })),
+        pending: mirror.pending,
+        windows: windows.map((w) => ({
+          id: w.id,
+          type: w.type,
+          incognito: w.incognito,
+          tabs: (w.tabs || [])
+            .filter((t) => t.pinned)
+            .map((t) => ({ id: t.id, url: tabUrl(t), index: t.index })),
+        })),
+        createLedger: session.createLedger || [],
+        mirrorReady: !!session.mirrorReady,
+        selfClosedCount: Object.keys(session.selfClosed || {}).length,
+        trace: globalThis.__tpDiag ? globalThis.__tpDiag.trace.slice() : [],
+        at: new Date().toISOString(),
+      };
     }
     case "ui:saveSnapshot":
       return saveSnapshot(request.name, request.windowId);

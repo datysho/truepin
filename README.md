@@ -9,7 +9,7 @@
 <p>
   <img src="https://img.shields.io/badge/Chrome-Manifest_V3-2563eb?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-2563eb?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/version-3.7.7-2563eb?style=flat-square" alt="version 3.7.7">
+  <img src="https://img.shields.io/badge/version-3.9.0-2563eb?style=flat-square" alt="version 3.9.0">
   <img src="https://img.shields.io/badge/network-none-16a34a?style=flat-square" alt="no network requests">
   <img src="https://img.shields.io/badge/languages-8-2563eb?style=flat-square" alt="8 languages">
 </p>
@@ -41,6 +41,7 @@ Reloading and navigating are free - the tab is not going anywhere, after all. Un
 | **Named sets** | Save the current pins under a name and restore them in one click. Sets ride Chrome Sync to your other devices. |
 | **Autosaves** | The last 10 states of your pinned set, kept automatically - the safety net and the undo, even after you close a whole window. |
 | **Per-tab lock** | Lock any single tab, pinned or not, straight from the popup. It holds until the browser session ends, and can optionally be pulled to the front of the tab strip. |
+| **Keeps its page** | Typing an address or search in a protected tab, or clicking a link to a clearly different site, opens in a new tab - the protected tab snaps back to its page. |
 | **Split-view aware** | Split pairs are recorded and kept adjacent, and restoring a set never tears a live split apart. |
 | **Native and private** | Chrome's own look, light / dark / auto, in 8 languages. No network requests, no tracking, no ads. |
 
@@ -55,7 +56,7 @@ Reloading and navigating are free - the tab is not going anywhere, after all. Un
 </picture>
 </div>
 
-Auto-protect pinned tabs, mirror across windows, autosaves, and the reopen notification are each their own toggle. The toolbar icon can match the browser UI in gray or stay in color, the theme follows the system or locks to light / dark, and the language auto-detects with a manual override.
+Auto-protect pinned tabs, mirror across windows, autosaves, the reopen notification, and the two keep-its-page interceptions (address bar, cross-site links) are each their own toggle. A "Copy diagnostics" link at the bottom puts the engine's full state on the clipboard for a bug report. The toolbar icon can match the browser UI in gray or stay in color, the theme follows the system or locks to light / dark, and the language auto-detects with a manual override.
 
 ## Native - light, dark, or auto
 
@@ -169,6 +170,8 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - The mirror keeps one pin per page per window: a second pin of the exact same page stays a local pin in that window and is not copied to the others. Different pages of the same site are each mirrored normally.
 - The pinned set itself is persisted (the "canon") and windows converge to it on every startup: leftover duplicates from crashes or older versions are closed, not multiplied - even for chat-style apps that redirect every copy to its own unique URL. Tabs that arrive already pinned (session restore, reopen-closed) are reconciled against the canon rather than trusted blindly; a page you explicitly pin is always kept.
 - A safety stop caps how many tabs the extension will ever create per minute. If something unexpected still goes wrong, TruePin stalls and shows one notification instead of flooding the tab strip.
+- The address-bar and cross-site-link interception cannot truly cancel a navigation (MV3 has no blocking API): the page starts to change, then snaps back - a brief flash. A prerendered omnibox suggestion ("Preload pages" on) can occasionally slip through and navigate in place.
+- Cross-site is judged by the registrable domain with a small built-in heuristic, not a full public-suffix list; exotic TLD layouts may be judged same-site. Sign-in flows that must return to the page (OAuth) complete in the new tab instead - turn the link toggle off if that gets in the way.
 
 ## Development
 

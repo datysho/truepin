@@ -158,6 +158,24 @@
   "optNotify": {
     "message": "受保护标签页恢复时发出通知"
   },
+  "optNavRedirect": {
+    "message": "在受保护的标签页中输入地址将打开新标签页"
+  },
+  "optNavRedirectHint": {
+    "message": "受保护的标签页会回到原页面；输入的地址或搜索将在旁边打开。链接、刷新和页面内导航不受影响。"
+  },
+  "optLinkRedirect": {
+    "message": "指向其他网站的链接在新标签页中打开"
+  },
+  "optLinkRedirectHint": {
+    "message": "仅限受保护的标签页，且仅当链接指向明显不同的网站时。需要返回原页面的登录流程建议关闭此项。"
+  },
+  "optDiag": {
+    "message": "复制诊断信息"
+  },
+  "optDiagCopied": {
+    "message": "已复制——请粘贴到反馈中"
+  },
   "notifReopenedPinned": {
     "message": "固定标签页不会被关闭。要关闭请先取消固定。"
   },

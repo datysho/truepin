@@ -35,6 +35,10 @@ browsing history, or the contents of any page.
   mirror pinned tabs across your windows.
 - **Storage** - to save your settings, autosaves, and named sets as described.
 - **Sessions** - to silently reopen a protected tab that was just closed.
+- **WebNavigation** - to notice when a protected tab is being navigated away
+  from the address bar or by a cross-site link, so the destination can open in
+  a new tab and the protected tab can stay on its page. Processed entirely in
+  your browser; nothing is recorded or sent anywhere.
 - **Notifications** - to optionally tell you when a protected tab was brought
   back.
 - **Favicon** - to show tab icons in the extension popup.

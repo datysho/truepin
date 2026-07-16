@@ -4,6 +4,8 @@ const DEFAULTS = {
   mirrorPinned: true,
   autoSnapshot: true,
   notifyReopen: true,
+  navRedirect: true,
+  linkRedirect: true,
   iconStyle: "color",
   lockToFront: "off",
   theme: "auto",
@@ -80,5 +82,17 @@ for (const field of FIELDS) {
   document.getElementById(field).addEventListener("change", save);
 }
 localize().then(load);
+
+// One-click diagnostics: full engine state to the clipboard, so a weirdness
+// report can carry the evidence without opening a console.
+document.getElementById("diagBtn").addEventListener("click", async () => {
+  const dump = await chrome.runtime.sendMessage({ type: "ui:diagnostics" });
+  await navigator.clipboard.writeText(JSON.stringify(dump, null, 2));
+  const note = document.getElementById("diagCopied");
+  note.style.visibility = "visible";
+  setTimeout(() => {
+    note.style.visibility = "hidden";
+  }, 2500);
+});
 
 document.getElementById("version").textContent = "v" + chrome.runtime.getManifest().version;
