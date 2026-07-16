@@ -253,9 +253,19 @@
       .linklike:hover {
         color: var(--fg);
       }
+      /* Wrap only the button so text-align:center centres IT; the "copied"
+         note is pulled out of flow (left:100% of the wrap) so it never
+         reserves width and tugs the button off-centre while hidden. */
+      .diag {
+        position: relative;
+        display: inline-block;
+      }
       #diagCopied {
-        color: var(--ok);
+        position: absolute;
+        left: 100%;
         margin-left: 6px;
+        white-space: nowrap;
+        color: var(--ok);
       }
     </style>
   </head>
@@ -366,8 +376,10 @@
 
       <p id="saved" data-i18n="saved"></p>
       <p class="ver">
-        <button id="diagBtn" class="linklike" data-i18n="optDiag"></button>
-        <span id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
+        <span class="diag">
+          <button id="diagBtn" class="linklike" data-i18n="optDiag"></button>
+          <span id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
+        </span>
       </p>
       <p class="ver" id="version"></p>
     </div>
