@@ -167,6 +167,8 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - With auto-protection off, pinned tabs close normally, and closing a copy is then synced across windows.
 - A reopened tab gets a new tab id; for pages without a `chrome.sessions` entry, the re-create fallback loses the back/forward history (the page and URL survive).
 - The mirror keeps one pin per page per window: a second pin of the exact same page stays a local pin in that window and is not copied to the others. Different pages of the same site are each mirrored normally.
+- The pinned set itself is persisted (the "canon") and windows converge to it on every startup: leftover duplicates from crashes or older versions are closed, not multiplied - even for chat-style apps that redirect every copy to its own unique URL. Tabs that arrive already pinned (session restore, reopen-closed) are reconciled against the canon rather than trusted blindly; a page you explicitly pin is always kept.
+- A safety stop caps how many tabs the extension will ever create per minute. If something unexpected still goes wrong, TruePin stalls and shows one notification instead of flooding the tab strip.
 
 ## Development
 

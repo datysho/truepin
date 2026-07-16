@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Вкладка под замком. Чтобы закрыть - выключи замок в попапе."
   },
+  "notifBreaker": {
+    "message": "Предохранитель: TruePin приостановил открытие вкладок - их появлялось слишком много подряд. Если повторится, перезагрузите расширение."
+  },
   "splitTitle": {
     "message": "Разделённый экран",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

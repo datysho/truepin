@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "node e2e.mjs",
-    "test:multiply": "node repro-multiply.mjs"
+    "test:multiply": "node repro-multiply.mjs",
+    "test:canon": "node repro-canon.mjs",
+    "test:resurrect": "node repro-restore-resurrect.mjs"
   },
   "devDependencies": {
     "puppeteer": "^24.0.0"

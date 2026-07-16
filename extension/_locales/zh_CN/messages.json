@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "此标签页已锁定。要关闭请在弹窗中解锁。"
   },
+  "notifBreaker": {
+    "message": "安全停止：TruePin 已暂停打开标签页——短时间内出现过多标签页。如再次发生，请重新加载扩展程序。"
+  },
   "splitTitle": {
     "message": "分屏",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

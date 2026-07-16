@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Cet onglet est verrouillé. Déverrouillez-le dans le pop-up pour fermer."
   },
+  "notifBreaker": {
+    "message": "Arrêt de sécurité : TruePin a suspendu l'ouverture d'onglets - trop d'onglets apparaissaient à la fois. Si cela se reproduit, rechargez l'extension."
+  },
   "splitTitle": {
     "message": "Écran partagé",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Вкладка під замком. Щоб закрити - вимкни замок у попапі."
   },
+  "notifBreaker": {
+    "message": "Запобіжник: TruePin призупинив відкриття вкладок - їх з'являлося забагато поспіль. Якщо повториться, перезавантажте розширення."
+  },
   "splitTitle": {
     "message": "Розділений екран",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

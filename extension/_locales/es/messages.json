@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Esta pestaña está bloqueada. Desbloquéala en el popup para cerrarla."
   },
+  "notifBreaker": {
+    "message": "Parada de seguridad: TruePin pausó la apertura de pestañas; aparecían demasiadas a la vez. Si se repite, recargue la extensión."
+  },
   "splitTitle": {
     "message": "Pantalla dividida",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

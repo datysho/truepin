@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Dieser Tab ist gesperrt. Zum Schließen im Popup entsperren."
   },
+  "notifBreaker": {
+    "message": "Sicherheitsstopp: TruePin hat das Öffnen von Tabs pausiert - es entstanden zu viele auf einmal. Falls es sich wiederholt, laden Sie die Erweiterung neu."
+  },
   "splitTitle": {
     "message": "Geteilte Ansicht",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

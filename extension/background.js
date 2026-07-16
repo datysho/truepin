@@ -16,6 +16,17 @@
 // its copies. Copies are live independent instances of the same page -
 // navigation inside one copy is not forced onto its siblings.
 //
+// The CANON is the one source of truth for what the pinned set IS: the
+// ordered list of group urls, persisted in storage.local (it survives
+// restarts; tab ids and the group map do not). Windows are always converged
+// TO the canon by one engine - restore, browser startup and window fill all
+// run the same diff-apply. The canon changes only through explicit acts:
+// a user pin/unpin, a navigation commit in a member, a restore. Leftover
+// tabs found lying around are never silently promoted into the canon -
+// re-deriving truth from whatever tabs exist is how duplicate pins used to
+// compound across restarts (pages like chat apps redirect every copy to its
+// own unique path, so leftovers never look like duplicates to a URL check).
+//
 // Snapshots: named sets of pinned tabs (storage.sync) plus a ring of the
 // last 10 autosaves (storage.local). An autosave happens when the set
 // changes structurally: a pin is added, removed, or navigates to a
@@ -23,6 +34,10 @@
 //
 // All per-tab and group state lives in chrome.storage.session: it survives
 // service worker suspension and resets together with tab ids on restart.
+//
+// Safety: every tab this extension creates passes a circuit breaker (rate
+// ledger + per-page cooldown for engine copies). Whatever else ever goes
+// wrong, mass tab creation is physically capped and reported, never silent.
 
 importScripts("i18n.js");
 importScripts("config.js");
@@ -48,6 +63,16 @@ const AUTO_SNAPS_KEY = "autoSnaps";
 const AUTO_SNAPS_MAX = 10;
 const AUTO_SNAP_DEBOUNCE_MS = 1500;
 const SNAP_PREFIX = "snap:";
+const CANON_KEY = "canonLayout";
+// Circuit breaker: base creation budget per sliding minute. Bounded bulk
+// operations (restore, startup converge) declare their exact extra budget up
+// front; event-driven paths live off the base. A runaway loop therefore
+// stalls and reports itself instead of opening tabs forever.
+const CREATE_WINDOW_MS = 60 * 1000;
+const CREATE_BURST = 25;
+// An engine-made copy of a page is never re-created in the same window twice
+// in a row: mirror loops always re-create the same page in the same window.
+const COPY_COOLDOWN_MS = 20 * 1000;
 
 // --- serialized state mutations ----------------------------------------
 let queueTail = Promise.resolve();
@@ -242,6 +267,34 @@ async function putMirror(mirror) {
     groupOrder: mirror.order,
     pendingCreates: mirror.pending,
   });
+  // The canon follows the mirror through this single writer: the ordered
+  // group urls, persisted across restarts (storage.local). Gated on a
+  // settled mirror: while the bootstrap is still reconstructing groups the
+  // mirror is legitimately empty or partial, and writing that through would
+  // erase exactly the truth the bootstrap needs. Once live, the canon
+  // tracks every change - including down to empty (the last unpin, the
+  // close of the last pinned window's group by the user).
+  const { mirrorReady } = await chrome.storage.session.get("mirrorReady");
+  if (!mirrorReady) return;
+  const urls = mirror.order
+    .map((gid) => mirror.groups[gid] && mirror.groups[gid].url)
+    .filter((url) => url && !isEphemeralUrl(url));
+  if (urls.length) {
+    await chrome.storage.local.set({ [CANON_KEY]: { urls, savedAt: Date.now() } });
+  } else {
+    await clearCanon();
+  }
+}
+
+async function getCanon() {
+  const { [CANON_KEY]: canon } = await chrome.storage.local.get(CANON_KEY);
+  return canon && Array.isArray(canon.urls) ? canon.urls.filter((u) => !isEphemeralUrl(u)) : [];
+}
+
+// The canon empties only through explicit user acts (the last unpin, a
+// mirror-off switch) - never through a cold start finding no groups yet.
+async function clearCanon() {
+  await chrome.storage.local.remove(CANON_KEY);
 }
 
 function groupOfTab(mirror, tabId) {
@@ -269,34 +322,45 @@ async function normalWindows() {
 async function createCopy(mirror, gid, windowId, index) {
   const group = mirror.groups[gid];
   // Never add a duplicate: if this window already holds a pinned tab of the
-  // same app (same origin), a copy would multiply the set across windows.
-  // Adopt a free matching pin if there is one; otherwise skip entirely.
+  // same page, a copy would multiply the set across windows. Adopt a free
+  // matching pin if there is one (exact page first, then a same-origin one -
+  // copies of chat apps drift to their own unique paths and would otherwise
+  // never match); otherwise skip entirely.
   const existing = (await quiet(chrome.tabs.query, { windowId, pinned: true })) || [];
   const twin = existing.find((t) => pathKey(tabUrl(t)) === pathKey(group.url));
   if (twin) {
     if (!groupOfTab(mirror, twin.id)) group.members[windowId] = twin.id;
     return;
   }
+  const drifted = existing.find(
+    (t) => !groupOfTab(mirror, t.id) && originKey(tabUrl(t)) === originKey(group.url),
+  );
+  if (drifted && !mirror.order.some((g) => g !== gid && mirror.groups[g] && originKey(mirror.groups[g].url) === originKey(group.url))) {
+    // Safe only when this is the sole group of that origin - two Notion-page
+    // groups must not collapse onto one tab.
+    group.members[windowId] = drifted.id;
+    return;
+  }
   mirror.pending.push({ windowId, gid, url: group.url });
-  const tab = await quiet(chrome.tabs.create, {
-    windowId,
-    url: group.url,
-    pinned: true,
-    index,
-    active: false,
-  });
+  const tab = await guardedCreate(
+    { windowId, url: group.url, pinned: true, index, active: false },
+    `mirror-copy ${pathKey(group.url)}`,
+    true,
+  );
   if (tab) {
     group.members[windowId] = tab.id;
   } else {
-    traceDiag(`createCopy failed win=${windowId} gid=${gid}`);
+    traceDiag(`createCopy skipped/failed win=${windowId} gid=${gid}`);
     mirror.pending = mirror.pending.filter((p) => !(p.windowId === windowId && p.gid === gid));
   }
 }
 
 // A pinned tab appeared (user pin, mirror copy, restore, session restore):
 // bind it to a group - by pending record, by page identity, or as a new
-// group that then gets mirrored into every other window.
-async function registerPinnedTab(tab, settings) {
+// group that then gets mirrored into every other window. `via` says HOW it
+// appeared: "pinned" (an explicit unpinned->pinned transition), "created"
+// (arrived already pinned - restore-shaped), "bootstrap" (adoption pass).
+async function registerPinnedTab(tab, settings, via = "pinned") {
   if (!settings.mirrorPinned) return;
   if (!tab || tab.id === undefined || tab.incognito) return;
   const mirror = await getMirror();
@@ -366,30 +430,50 @@ async function registerPinnedTab(tab, settings) {
   });
   if (dupeInWindow) return;
 
+  // A tab that ARRIVED pinned (chrome.tabs.onCreated with pinned:true) and
+  // matched nothing above is restore-shaped: session restore, reopen-closed,
+  // another tool re-materializing tabs. That is not a user pinning a page -
+  // it must not mint a group and fan out (drift residue re-entering this way
+  // is exactly how the set used to compound). A follow-up convergence lets
+  // the canon adjudicate: covered pages bind, an unknown origin pinned once
+  // is kept, residue closes. Only a live canon can adjudicate - without one
+  // this is simply the first pin of a fresh profile. An explicit unpinned ->
+  // pinned transition (via === "pinned") always mints.
+  if (via === "created" && (await getCanon()).length) {
+    traceDiag(`restore-shaped pin ${pathKey(url)} @win=${tab.windowId}: converge follow-up`);
+    scheduleConverge();
+    return;
+  }
+
   // New group: user pinned a tab. Mirror it into every other window -
   // ADOPTING an existing matching pin there before ever creating a copy
   // (blind creation is how an extension reload used to duplicate the set).
+  // The copies are budgeted to exactly the windows this one act can reach:
+  // the allowance is what separates a user pin from a feedback loop.
   const gid = await nextGid();
   mirror.groups[gid] = { url, members: { [tab.windowId]: tab.id } };
   const position = Math.min(Math.max(tab.index, 0), mirror.order.length);
   mirror.order.splice(position, 0, gid);
   traceDiag(`group ${gid} created for ${pathKey(url)} @win=${tab.windowId}`);
-  for (const w of await normalWindows()) {
-    if (w.id === tab.windowId || mirror.groups[gid].members[w.id] !== undefined) continue;
-    const candidates = (await quiet(chrome.tabs.query, { windowId: w.id, pinned: true })) || [];
-    const free =
-      candidates.find(
-        (t) => !groupOfTab(mirror, t.id) && pathKey(tabUrl(t)) === pathKey(url),
-      ) ||
-      candidates.find(
-        (t) => !groupOfTab(mirror, t.id) && originKey(tabUrl(t)) === originKey(url),
-      );
-    if (free) {
-      mirror.groups[gid].members[w.id] = free.id;
-      continue;
+  const windows = await normalWindows();
+  await withCreateAllowance(Math.max(0, windows.length - 1), async () => {
+    for (const w of windows) {
+      if (w.id === tab.windowId || mirror.groups[gid].members[w.id] !== undefined) continue;
+      const candidates = (await quiet(chrome.tabs.query, { windowId: w.id, pinned: true })) || [];
+      const free =
+        candidates.find(
+          (t) => !groupOfTab(mirror, t.id) && pathKey(tabUrl(t)) === pathKey(url),
+        ) ||
+        candidates.find(
+          (t) => !groupOfTab(mirror, t.id) && originKey(tabUrl(t)) === originKey(url),
+        );
+      if (free) {
+        mirror.groups[gid].members[w.id] = free.id;
+        continue;
+      }
+      await createCopy(mirror, gid, w.id, position);
     }
-    await createCopy(mirror, gid, w.id, position);
-  }
+  });
   await putMirror(mirror);
   scheduleAutoSnapshot();
 }
@@ -418,21 +502,29 @@ async function syncWindowFill(windowId, settings) {
     await registerPinnedTab(tab, settings);
   }
   const mirror = await getMirror();
-  let changed = false;
-  for (let i = 0; i < mirror.order.length; i++) {
-    const gid = mirror.order[i];
-    if (isEphemeralUrl(mirror.groups[gid].url)) continue; // never fill these
-    if (mirror.groups[gid].members[windowId] === undefined) {
-      await createCopy(mirror, gid, windowId, i);
-      changed = true;
+  const missing = mirror.order.filter(
+    (gid) =>
+      !isEphemeralUrl(mirror.groups[gid].url) && mirror.groups[gid].members[windowId] === undefined,
+  ).length;
+  if (!missing) return;
+  await withCreateAllowance(missing, async () => {
+    let changed = false;
+    for (let i = 0; i < mirror.order.length; i++) {
+      const gid = mirror.order[i];
+      if (isEphemeralUrl(mirror.groups[gid].url)) continue; // never fill these
+      if (mirror.groups[gid].members[windowId] === undefined) {
+        await createCopy(mirror, gid, windowId, i);
+        changed = true;
+      }
     }
-  }
-  if (changed) await putMirror(mirror);
+    if (changed) await putMirror(mirror);
+  });
 }
 
 async function rebuildMirror(settings) {
   if (!settings.mirrorPinned) {
     await chrome.storage.session.set({ groups: {}, groupOrder: [], pendingCreates: [] });
+    await clearCanon();
     return;
   }
   // Unregister groups recorded with an ephemeral url (an older version could
@@ -448,16 +540,84 @@ async function rebuildMirror(settings) {
   }
   // At browser startup the session-restored windows are still growing their
   // tab strips; adopting a half-restored window would duplicate the rest.
+  // Restores come in bursts with real pauses between them, so one matching
+  // poll is not stability - require a stretch of silence.
   let previous = -1;
-  for (let attempt = 0; attempt < 30; attempt++) {
+  let calm = 0;
+  for (let attempt = 0; attempt < 40; attempt++) {
     const tabs = await chrome.tabs.query({});
-    if (tabs.length > 0 && tabs.length === previous) break;
+    if (tabs.length > 0 && tabs.length === previous) {
+      calm++;
+      if (calm >= 3) break;
+    } else {
+      calm = 0;
+    }
     previous = tabs.length;
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
+  // Converge to the canon only on a COLD start (the mirror not settled yet:
+  // browser restart, extension reload/update). A mid-session rebuild - a
+  // settings change - runs over a live, complete mirror; converging there
+  // races user acts (an unpin in flight looks like a missing pin and would
+  // be resurrected). Mid-session the adopt+fill below is exactly enough.
+  const cold = !(await isMirrorReady());
+  const canon = await getCanon();
+  if (cold && canon.length) {
+    await convergeToCanon(canon, settings);
+    return;
+  }
+  // No canon to converge to (first run, or explicitly emptied) or a live
+  // mirror: adopt what exists and fill gaps, without closing anything; the
+  // canon keeps tracking the mirror.
   for (const w of await normalWindows()) {
     await syncWindowFill(w.id, settings);
   }
+}
+
+// The persisted canon is the truth: converge every window to it with the
+// same engine a restore uses. Leftover pins beyond the canon are residue of
+// past duplication and close; they are never promoted into groups. The one
+// exception: an origin the canon does not know at all, pinned exactly ONCE
+// across all windows - that is a user pin the canon write may have missed
+// (crash right after pinning). Counted per origin, not per page: drift
+// residue is many unique paths on one origin, and a per-page count would
+// wave it all through.
+async function convergeToCanon(canon, settings) {
+  const windows = await normalWindows();
+  const canonOrigins = new Set(canon.map((u) => originKey(u)));
+  const strays = new Map(); // origin -> { count, url }
+  for (const w of windows) {
+    const pins = (await quiet(chrome.tabs.query, { windowId: w.id, pinned: true })) || [];
+    for (const t of pins) {
+      const url = tabUrl(t);
+      if (!url || isEphemeralUrl(url) || canonOrigins.has(originKey(url))) continue;
+      const record = strays.get(originKey(url)) || { count: 0, url };
+      record.count++;
+      strays.set(originKey(url), record);
+    }
+  }
+  const target = [...canon];
+  for (const record of strays.values()) {
+    if (record.count === 1) target.push(record.url);
+  }
+  const authWindowId = (await pinnedHomeWindow()) ?? (windows[0] && windows[0].id);
+  if (authWindowId === undefined) return;
+  await applyCanonicalSet(target, authWindowId, settings, { loose: true });
+}
+
+// Debounced follow-up convergence, for session-restore stragglers that
+// arrive after the bootstrap has already settled.
+let convergeTimer = null;
+function scheduleConverge() {
+  clearTimeout(convergeTimer);
+  convergeTimer = setTimeout(() => {
+    enqueue(async () => {
+      const settings = await getSettings();
+      if (!settings.mirrorPinned) return;
+      const canon = await getCanon();
+      if (canon.length) await convergeToCanon(canon, settings);
+    }, "converge-followup");
+  }, 2500);
 }
 
 // --- cold-start settling --------------------------------------------------
@@ -491,10 +651,10 @@ function ensureColdBootstrap() {
 
 // Live tab events (onCreated/onUpdated) route pin registration here; the
 // bootstrap's own syncWindowFill keeps calling registerPinnedTab directly.
-async function registerPinnedLive(tab, settings) {
+async function registerPinnedLive(tab, settings, via) {
   if (!settings.mirrorPinned) return;
   if (await isMirrorReady()) {
-    await registerPinnedTab(tab, settings);
+    await registerPinnedTab(tab, settings, via);
   } else {
     ensureColdBootstrap();
   }
@@ -533,46 +693,162 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // --- self-closed markers ------------------------------------------------
 // Tabs the extension closes itself (mirroring, snapshot restore) must not
 // be reopened by the protection.
-async function markSelfClosed(tabIds) {
-  const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
-  const now = Date.now();
-  for (const [id, ts] of Object.entries(selfClosed)) {
-    if (now - ts > SELF_CLOSED_TTL_MS) delete selfClosed[id];
-  }
-  for (const id of tabIds) selfClosed[id] = now;
-  await chrome.storage.session.set({ selfClosed });
+//
+// Every mutation of the shared record goes through ONE serializer:
+// chrome.storage get/set are not atomic, and concurrent read-modify-write
+// cycles (a restore once discarded dozens of tabs in parallel, each
+// appending its swapped id) lose entries. An unmarked self-close then looks
+// user-made and the protection resurrects the tab.
+let selfClosedTail = Promise.resolve();
+function withSelfClosed(mutate) {
+  const run = selfClosedTail.then(async () => {
+    const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
+    const now = Date.now();
+    for (const [id, ts] of Object.entries(selfClosed)) {
+      if (now - ts > SELF_CLOSED_TTL_MS) delete selfClosed[id];
+    }
+    const result = mutate(selfClosed, now);
+    await chrome.storage.session.set({ selfClosed });
+    return result;
+  });
+  selfClosedTail = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
 }
 
-async function wasSelfClosed(tabId) {
-  const { selfClosed = {} } = await chrome.storage.session.get("selfClosed");
-  if (!(tabId in selfClosed)) return false;
-  delete selfClosed[tabId];
-  await chrome.storage.session.set({ selfClosed });
-  return true;
+function markSelfClosed(tabIds) {
+  return withSelfClosed((record, now) => {
+    for (const id of tabIds) record[id] = now;
+  });
+}
+
+function wasSelfClosed(tabId) {
+  return withSelfClosed((record) => {
+    if (!(tabId in record)) return false;
+    delete record[tabId];
+    return true;
+  });
 }
 
 // Close tabs the extension owns (mirror copies, snapshot extras), silently
 // and without partial failures:
 //   1. Discard the page first: a discarded document runs no beforeunload,
 //      so a page's OWN unload handler (draft warnings etc.) cannot pop a
-//      dialog in a window the user is not even looking at.
+//      dialog in a window the user is not even looking at. A discard swaps
+//      the tab id; the swapped ids are marked in one write, not N racing
+//      ones.
 //   2. Remove each tab individually - a batched tabs.remove() fails as a
 //      whole when any single id is already gone, leaving survivors behind.
-// Marked self-closed first so the protection does not reopen them.
+//   3. Verify. A remove can fail silently (strip busy); reporting a close
+//      that never happened is how "restore left extras behind" hides.
+// Returns the number of tabs that are actually gone.
 async function closeTabs(tabIds) {
-  if (!tabIds.length) return;
+  if (!tabIds.length) return 0;
   await markSelfClosed(tabIds);
-  await Promise.all(
+  const finalIds = await Promise.all(
     tabIds.map(async (id) => {
       const discarded = await quiet(chrome.tabs.discard, id);
-      let finalId = id;
-      if (discarded && discarded.id !== undefined && discarded.id !== id) {
-        finalId = discarded.id;
-        await markSelfClosed([finalId]);
-      }
-      await quiet(chrome.tabs.remove, finalId);
+      return discarded && discarded.id !== undefined ? discarded.id : id;
     }),
   );
+  const swapped = finalIds.filter((id) => !tabIds.includes(id));
+  if (swapped.length) await markSelfClosed(swapped);
+  await Promise.all(finalIds.map((id) => quiet(chrome.tabs.remove, id)));
+  let closed = 0;
+  const survivors = [];
+  for (const id of finalIds) {
+    if (await quiet(chrome.tabs.get, id)) survivors.push(id);
+    else closed++;
+  }
+  if (survivors.length) {
+    await Promise.all(survivors.map((id) => quiet(chrome.tabs.remove, id)));
+    for (const id of survivors) {
+      if (await quiet(chrome.tabs.get, id)) traceDiag(`closeTabs: tab ${id} refused to close`);
+      else closed++;
+    }
+  }
+  return closed;
+}
+
+// --- creation circuit breaker ---------------------------------------------
+// The last line of the "never mass-open tabs" guarantee: every tab the
+// extension creates passes through here. The rate ledger lives in
+// storage.session so a crashing worker cannot reset its own budget; the
+// allowance is in-memory because it never outlives the queued job that
+// granted it.
+let createAllowance = 0;
+let breakerNotifiedAt = 0;
+
+async function withCreateAllowance(extra, work) {
+  createAllowance = Math.max(createAllowance, extra);
+  try {
+    return await work();
+  } finally {
+    createAllowance = 0;
+  }
+}
+
+function notifyBreaker() {
+  if (Date.now() - breakerNotifiedAt < 5 * 60 * 1000) return;
+  breakerNotifiedAt = Date.now();
+  ensureI18n().then(() => {
+    chrome.notifications.create(
+      "truepin-breaker",
+      {
+        type: "basic",
+        iconUrl: "icons/locked-128.png",
+        title: "TruePin",
+        message: tpI18n.t("notifBreaker"),
+      },
+      checked,
+    );
+  });
+}
+
+// One creation token, or an honest refusal. All extension code runs through
+// the job queue, so the ledger read-modify-write here is never concurrent.
+async function takeCreateToken(why) {
+  const now = Date.now();
+  const { createLedger = [] } = await chrome.storage.session.get("createLedger");
+  const recent = createLedger.filter((ts) => now - ts < CREATE_WINDOW_MS);
+  if (createAllowance > 0) {
+    createAllowance--;
+  } else if (recent.length >= CREATE_BURST) {
+    traceDiag(`breaker: refused ${why} (${recent.length} creations in the last minute)`);
+    notifyBreaker();
+    return false;
+  }
+  recent.push(now);
+  await chrome.storage.session.set({ createLedger: recent });
+  return true;
+}
+
+// Engine copies only: the same page is never re-created in the same window
+// twice within the cooldown - a mirror loop is exactly that signature, while
+// a legitimate copy of a page lands in a window once.
+async function underCopyCooldown(windowId, url) {
+  const key = `${windowId}|${pathKey(url)}`;
+  const now = Date.now();
+  const { copyStamps = {} } = await chrome.storage.session.get("copyStamps");
+  for (const [k, ts] of Object.entries(copyStamps)) {
+    if (now - ts > COPY_COOLDOWN_MS) delete copyStamps[k];
+  }
+  if (copyStamps[key]) {
+    traceDiag(`breaker: copy cooldown hit for ${key}`);
+    return true;
+  }
+  copyStamps[key] = now;
+  await chrome.storage.session.set({ copyStamps });
+  return false;
+}
+
+// Guarded chrome.tabs.create. Returns the tab or null (refused / failed).
+async function guardedCreate(props, why, isEngineCopy) {
+  if (isEngineCopy && (await underCopyCooldown(props.windowId, props.url))) return null;
+  if (!(await takeCreateToken(why))) return null;
+  return quiet(chrome.tabs.create, props);
 }
 
 // --- messages (popup UI) --------------------------------
@@ -593,7 +869,7 @@ chrome.tabs.onCreated.addListener((tab) => {
     const settings = await getSettings();
     await refreshTab(tab, settings);
     if (tab.pinned) {
-      await registerPinnedLive(tab, settings);
+      await registerPinnedLive(tab, settings, "created");
       scheduleAutoSnapshot();
     }
   }, "created");
@@ -610,6 +886,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     traceDiag(`updated tab=${tabId} change=${JSON.stringify(changeInfo)}`);
     const settings = await getSettings();
     const state = (await getTabState(tabId)) || newTabState(tab);
+    const priorUrl = state.url;
     state.pinned = !!tab.pinned;
     if (tabUrl(tab)) state.url = tabUrl(tab);
     state.protected = computeProtected(state, settings);
@@ -624,7 +901,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
     // Mirroring bookkeeping.
     if (changeInfo.pinned === true) {
-      await registerPinnedLive(tab, settings);
+      await registerPinnedLive(tab, settings, "pinned");
       scheduleAutoSnapshot();
     }
     if (changeInfo.pinned === false) {
@@ -646,9 +923,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         }
       } else if (!isEphemeralUrl(changeInfo.url)) {
         // A pinned tab that was ephemeral (split-view partner on the empty
-        // new-tab page) just navigated somewhere real: it becomes a
-        // first-class pin - group it and mirror it now.
-        await registerPinnedLive(tab, settings);
+        // new-tab page) just navigated somewhere real: the user took it to a
+        // page - a first-class pin, group and mirror it now. If it was
+        // ALREADY on a real page, this is just a created/restored tab
+        // committing or redirecting - keep it on the adjudication path.
+        const wasEphemeral = isEphemeralUrl(priorUrl);
+        await registerPinnedLive(tab, settings, wasEphemeral ? "pinned" : "created");
         scheduleAutoSnapshot();
       }
     }
@@ -769,6 +1049,24 @@ async function reopenTab(state, windowId, settings) {
   // by itself, and state recorded by an older version may still claim such
   // a tab was protected. A manual lock is an explicit user decision.
   if (state.manual !== true && isEphemeralUrl(url)) return;
+  // One pin per page per window: if the page is already pinned there, this
+  // close was bookkeeping noise (a stale carried-over state, a duplicate),
+  // not a user loss - resurrecting it would mint a second copy.
+  if (
+    state.manual !== true &&
+    windowId !== undefined &&
+    windowId !== chrome.windows.WINDOW_ID_NONE
+  ) {
+    const pins = (await quiet(chrome.tabs.query, { windowId, pinned: true })) || [];
+    if (pins.some((t) => pathKey(tabUrl(t)) === pathKey(url))) {
+      traceDiag(`reopen skipped: ${pathKey(url)} already pinned in win=${windowId}`);
+      return;
+    }
+  }
+  // The breaker is the outer net: a reopen storm is a bug by construction
+  // (mass closes of protected tabs are either window closes, which skip
+  // reopening, or extension closes, which are marked self-closed).
+  if (!(await takeCreateToken(`reopen ${pathKey(url)}`))) return;
   let newTab = null;
   // chrome.sessions preserves history, scroll and form state - try it first.
   for (let attempt = 0; attempt < 8 && !newTab; attempt++) {
@@ -1145,50 +1443,93 @@ async function deleteSnapshot(name) {
 
 // Make `urls` the pinned set: diff-apply in the authoritative window (reuse
 // matching tabs in place, create missing, close extras), then rebuild the
-// groups from it and sync every other window the same way.
-async function applyCanonicalSet(urls, authWindowId, settings) {
+// groups from it and sync every other window the same way. ONE engine for
+// both a restore (strict matching: the user asked for the saved pages, not
+// whatever a copy drifted to) and startup convergence (loose matching: a
+// same-origin drifted copy is the same logical pin and keeps its live
+// state). Creation is budgeted to exactly this set across these windows.
+async function applyCanonicalSet(urls, authWindowId, settings, { loose = false } = {}) {
   // The set being replaced becomes an autosave entry (undo path).
   await writeAutoSnapshot();
+  const windows = settings.mirrorPinned ? await normalWindows() : [];
+  const budget = urls.length * Math.max(1, windows.length) + 4;
 
-  const stats = await diffApplyWindow(urls, authWindowId, true);
+  return withCreateAllowance(budget, async () => {
+    const stats = await diffApplyWindow(urls, authWindowId, true, loose);
 
-  // Rebuild groups from the authoritative window.
-  const authPinned = await pinnedTabsOf(authWindowId);
+    // Rebuild groups from the authoritative window.
+    const authPinned = await pinnedTabsOf(authWindowId);
+    const mirror = await getMirror();
+    mirror.groups = {};
+    mirror.order = [];
+    mirror.pending = [];
+    for (const tab of authPinned) {
+      if (isEphemeralUrl(tabUrl(tab))) continue;
+      const gid = await nextGid();
+      mirror.groups[gid] = { url: tabUrl(tab), members: { [authWindowId]: tab.id } };
+      mirror.order.push(gid);
+    }
+    await putMirror(mirror);
+
+    if (settings.mirrorPinned) {
+      for (const w of windows) {
+        if (w.id === authWindowId) continue;
+        await diffApplyWindow(urls, w.id, true, loose);
+        await bindWindowToGroups(w.id);
+      }
+      // Verify the post-condition: every window holds exactly the set. One
+      // corrective pass for a window that raced away, then honesty - the
+      // trace and the popup report what actually happened, never wishes.
+      for (const w of windows) {
+        const pins = (await pinnedTabsOf(w.id)).filter((t) => !isEphemeralUrl(tabUrl(t)));
+        if (pins.length !== mirror.order.length) {
+          traceDiag(
+            `converge verify win=${w.id}: ${pins.length} pins vs ${mirror.order.length} groups, re-applying`,
+          );
+          await diffApplyWindow(urls, w.id, true, loose);
+          await bindWindowToGroups(w.id);
+        }
+      }
+    }
+    scheduleAutoSnapshot();
+    return stats;
+  });
+}
+
+// Bind a window's unbound pinned tabs to the current groups: exact page
+// first, then a same-origin drifted copy - but only when that origin has a
+// single group (two Notion-page groups must not collapse onto one tab).
+async function bindWindowToGroups(windowId) {
+  const tabs = await pinnedTabsOf(windowId);
   const mirror = await getMirror();
-  mirror.groups = {};
-  mirror.order = [];
-  mirror.pending = [];
-  for (const tab of authPinned) {
-    const gid = await nextGid();
-    mirror.groups[gid] = { url: tabUrl(tab), members: { [authWindowId]: tab.id } };
-    mirror.order.push(gid);
+  const originGroups = new Map();
+  for (const gid of mirror.order) {
+    const key = originKey(mirror.groups[gid].url);
+    originGroups.set(key, (originGroups.get(key) || 0) + 1);
+  }
+  for (const tab of tabs) {
+    if (groupOfTab(mirror, tab.id)) continue;
+    const url = tabUrl(tab);
+    if (isEphemeralUrl(url)) continue;
+    const gid =
+      mirror.order.find(
+        (g) =>
+          mirror.groups[g].members[windowId] === undefined &&
+          pathKey(mirror.groups[g].url) === pathKey(url),
+      ) ||
+      mirror.order.find(
+        (g) =>
+          mirror.groups[g].members[windowId] === undefined &&
+          originKey(mirror.groups[g].url) === originKey(url) &&
+          originGroups.get(originKey(url)) === 1,
+      );
+    if (gid) mirror.groups[gid].members[windowId] = tab.id;
   }
   await putMirror(mirror);
-
-  if (settings.mirrorPinned) {
-    for (const w of await normalWindows()) {
-      if (w.id === authWindowId) continue;
-      await diffApplyWindow(urls, w.id, true);
-      // Bind the resulting tabs to the rebuilt groups.
-      const tabs = await pinnedTabsOf(w.id);
-      const fresh = await getMirror();
-      for (const tab of tabs) {
-        const gid = fresh.order.find(
-          (g) =>
-            fresh.groups[g].members[w.id] === undefined &&
-            pathKey(fresh.groups[g].url) === pathKey(tabUrl(tab)),
-        );
-        if (gid) fresh.groups[gid].members[w.id] = tab.id;
-      }
-      await putMirror(fresh);
-    }
-  }
-  scheduleAutoSnapshot();
-  return stats;
 }
 
 // Diff one window's pinned tabs against the target list of urls.
-async function diffApplyWindow(urls, windowId, closeExtras) {
+async function diffApplyWindow(urls, windowId, closeExtras, loose = false) {
   const current = await pinnedTabsOf(windowId);
   const used = new Set();
   let reused = 0;
@@ -1197,7 +1538,10 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
     const url = urls[i];
     const match =
       current.find((t) => !used.has(t.id) && tabUrl(t) === url) ||
-      current.find((t) => !used.has(t.id) && pathKey(tabUrl(t)) === pathKey(url));
+      current.find((t) => !used.has(t.id) && pathKey(tabUrl(t)) === pathKey(url)) ||
+      (loose
+        ? current.find((t) => !used.has(t.id) && originKey(tabUrl(t)) === originKey(url))
+        : undefined);
     if (match) {
       used.add(match.id);
       reused++;
@@ -1211,28 +1555,23 @@ async function diffApplyWindow(urls, windowId, closeExtras) {
         await quiet(chrome.tabs.move, match.id, { index: i });
       }
     } else {
-      const tab = await quiet(chrome.tabs.create, {
-        windowId,
-        url,
-        pinned: true,
-        index: i,
-        active: false,
-      });
+      const tab = await guardedCreate(
+        { windowId, url, pinned: true, index: i, active: false },
+        `converge ${pathKey(url)}`,
+        false,
+      );
       if (tab) {
         used.add(tab.id);
         created++;
       } else {
-        traceDiag(`diffApply: create failed for ${url}`);
+        traceDiag(`diffApply: create refused/failed for ${url}`);
       }
     }
   }
   let closed = 0;
   if (closeExtras) {
     const extras = current.filter((t) => !used.has(t.id)).map((t) => t.id);
-    if (extras.length) {
-      await closeTabs(extras);
-      closed = extras.length;
-    }
+    if (extras.length) closed = await closeTabs(extras);
   }
   return { reused, created, closed };
 }

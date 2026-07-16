@@ -164,6 +164,9 @@
   "notifReopenedManual": {
     "message": "Esta aba está travada. Destrave no popup para fechar."
   },
+  "notifBreaker": {
+    "message": "Parada de segurança: o TruePin pausou a abertura de guias - muitas estavam surgindo de uma vez. Se repetir, recarregue a extensão."
+  },
   "splitTitle": {
     "message": "Tela dividida",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

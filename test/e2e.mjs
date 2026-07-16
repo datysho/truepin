@@ -590,7 +590,7 @@ async function main() {
     assert(result.ok, "restore ok");
     assert(
       result.reused === 1 && result.created === 1 && result.closed === 1,
-      `diff counts (${JSON.stringify(result)})`,
+      `diff counts (${JSON.stringify(result)}; saved=${JSON.stringify(snapRaw.urls)})`,
     );
 
     step("verify restored set");
@@ -1194,16 +1194,47 @@ async function main() {
     // copy each such pin into windows whose own copy had not been restored
     // yet, and the restored originals then spawned fresh groups - an N-window
     // cascade that multiplied the pinned set on every restart. Cold-start
-    // events must instead funnel into ONE stabilizing bootstrap that adopts
-    // what already exists. Here we wipe the mirror and then trickle the same
-    // new pin into each window (as a session restore does).
+    // events must instead funnel into ONE stabilizing bootstrap that
+    // converges the windows to the persisted canon. So: pin normally first
+    // (the canon absorbs the page), kill the tabs over a wiped mirror, then
+    // trickle them back in as a session restore does.
     const winIds = [snapWindowId, mirrorWinId, urlWinId];
     const url = `${baseUrl}/restart-x`;
 
-    step("cold start: wipe mirror state, no bootstrap");
-    await swEval(() => globalThis.__tpWipeState());
+    step("pin restart-x normally (a user act); it mirrors everywhere and enters the canon");
+    await swEval(
+      async (args) => {
+        const t = await chrome.tabs.create({ windowId: args.wid, url: args.url, active: false });
+        await new Promise((r) => setTimeout(r, 400));
+        await chrome.tabs.update(t.id, { pinned: true });
+      },
+      { wid: winIds[0], url },
+    );
+    await waitFor(
+      "restart-x mirrored to every window",
+      async () => {
+        for (const wid of winIds) {
+          const count = (await pinnedOf(wid)).filter((p) => p.url.includes("restart-x")).length;
+          if (count !== 1) return false;
+        }
+        return true;
+      },
+      10_000,
+      250,
+    );
 
-    step("session restore trickles the same pin into every window, staggered");
+    step("cold start: wipe mirror state, close the dead session's restart-x tabs");
+    await swEval(() => globalThis.__tpWipeState());
+    await swEval(async (marker) => {
+      const tabs = await chrome.tabs.query({ pinned: true });
+      await Promise.all(
+        tabs
+          .filter((t) => ((t.url || t.pendingUrl) || "").includes(marker))
+          .map((t) => chrome.tabs.remove(t.id).catch(() => {})),
+      );
+    }, "restart-x");
+
+    step("session restore trickles the pin back into every window, staggered");
     for (const wid of winIds) {
       await swEval(
         async (args) =>
@@ -1416,6 +1447,27 @@ async function main() {
     step("cleanup window");
     await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
     await sleep(500);
+  });
+
+  await test("circuit breaker: a creation storm is capped, never unbounded", async () => {
+    step("hammer the token ledger with no allowance");
+    const res = await swEval(async () => {
+      const { createLedger: before = [] } = await chrome.storage.session.get("createLedger");
+      const now = Date.now();
+      const recentBefore = before.filter((ts) => now - ts < 60_000).length;
+      let granted = 0;
+      for (let i = 0; i < 80; i++) {
+        if (await takeCreateToken("breaker-e2e")) granted++;
+      }
+      // Restore the budget so later scenarios are unaffected.
+      await chrome.storage.session.set({ createLedger: before });
+      return { granted, recentBefore };
+    });
+    step(`granted ${res.granted} with ${res.recentBefore} recent`);
+    assert(
+      res.granted === Math.max(0, 25 - res.recentBefore),
+      `cap honored exactly (granted ${res.granted}, prior ${res.recentBefore})`,
+    );
   });
 
   await test("i18n: english by default, russian messages load", async () => {
