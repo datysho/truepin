@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "安全停止：TruePin 已暂停打开标签页——短时间内出现过多标签页。如再次发生，请重新加载扩展程序。"
   },
+  "notifHealed": {
+    "message": "TruePin 已清理被批量重复的固定标签页。如有缺失，请在弹窗的自动保存中恢复之前的状态。"
+  },
   "splitTitle": {
     "message": "分屏",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "Safety stop: TruePin paused opening tabs because too many appeared at once. If this repeats, reload the extension."
   },
+  "notifHealed": {
+    "message": "TruePin cleaned up mass-duplicated pinned tabs. If anything is missing, restore the previous state from Autosaves in the popup."
+  },
   "splitTitle": {
     "message": "Split view",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

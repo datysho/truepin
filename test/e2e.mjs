@@ -1719,6 +1719,96 @@ async function main() {
     await sleep(400);
   });
 
+  await test("mass-duplication heal: signature detection and keeper choice (unit)", async () => {
+    step("three duplicated origins = disease; saved-set url wins as keeper");
+    const diseased = await swEval(
+      (args) => {
+        const out = healMassDuplication(args.entries, new Set(args.setUrls));
+        return out && { keep: out.keep.map((e) => e.url), close: out.close.map((e) => e.url) };
+      },
+      {
+        entries: [
+          { url: "https://a.com/1", order: 0 },
+          { url: "https://a.com/2", order: 1 },
+          { url: "https://b.com/x", order: 2 },
+          { url: "https://b.com/y", order: 3 },
+          { url: "https://c.com/p", order: 4 },
+          { url: "https://c.com/q", order: 5 },
+          { url: "https://solo.com/only", order: 6 },
+        ],
+        setUrls: ["https://b.com/y"],
+      },
+    );
+    assert(diseased, "mass signature detected");
+    assert(diseased.keep.length === 4, `one per origin + solo kept (${diseased.keep.join(", ")})`);
+    assert(diseased.keep.includes("https://b.com/y"), "saved-set url wins as keeper");
+    assert(diseased.keep.includes("https://a.com/1"), "first pin wins without a set match");
+    assert(diseased.keep.includes("https://solo.com/only"), "singleton origin untouched");
+    assert(diseased.close.length === 3, "the other copies close");
+
+    step("two duplicated origins = plausible user intent, no heal");
+    const healthy = await swEval(
+      (args) => healMassDuplication(args.entries, new Set()),
+      {
+        entries: [
+          { url: "https://a.com/1", order: 0 },
+          { url: "https://a.com/2", order: 1 },
+          { url: "https://b.com/x", order: 2 },
+          { url: "https://b.com/y", order: 3 },
+          { url: "https://solo.com/only", order: 4 },
+        ],
+      },
+    );
+    assert(healthy === null, "no heal below the mass threshold");
+  });
+
+  await test("migration heal: a mass-duplicated canon collapses once, marker set", async () => {
+    step("seed a diseased canon, clear the heal marker");
+    await swEval(async () => {
+      await chrome.storage.local.set({
+        canonLayout: {
+          urls: [
+            "https://tp-a.invalid/1",
+            "https://tp-a.invalid/2",
+            "https://tp-b.invalid/x",
+            "https://tp-b.invalid/y",
+            "https://tp-c.invalid/p",
+            "https://tp-c.invalid/q",
+          ],
+          savedAt: Date.now(),
+        },
+      });
+      await chrome.storage.local.remove("canonHealVersion");
+    });
+    step("cold bootstrap runs the one-time migration");
+    await swEval(() => globalThis.__tpSimulateReload());
+    await sleep(5500);
+    const after = await swEval(async () => ({
+      canon: ((await chrome.storage.local.get("canonLayout")).canonLayout || {}).urls || [],
+      marker: (await chrome.storage.local.get("canonHealVersion")).canonHealVersion,
+    }));
+    assert(after.marker, "heal marker set");
+    const origins = after.canon.map((u) => new URL(u).origin);
+    assert(
+      new Set(origins).size === origins.length,
+      `disease shape gone - no origin twice (${after.canon.join(", ")})`,
+    );
+    step("cleanup: drop the synthetic canon and its error-page pins, rebuild from live state");
+    for (let i = 0; i < 10; i++) {
+      const t = await findTab("tp-");
+      if (!t) break;
+      await setPinned(t.id, false);
+      await sleep(1100);
+      await removeTab(t.id);
+      await sleep(250);
+    }
+    await swEval(async () => {
+      await chrome.storage.local.remove("canonLayout");
+      return globalThis.__tpSimulateReload();
+    });
+    await sleep(4500);
+  });
+
   await test("canon: survives a window-death write, empties on an explicit dissolve", async () => {
     step("pin a page so the canon is non-empty");
     const w = await swEval(async (b) => {

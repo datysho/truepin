@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "Arrêt de sécurité : TruePin a suspendu l'ouverture d'onglets - trop d'onglets apparaissaient à la fois. Si cela se reproduit, rechargez l'extension."
   },
+  "notifHealed": {
+    "message": "TruePin a nettoyé des onglets épinglés dupliqués en masse. S'il manque quelque chose, restaurez l'état précédent depuis les sauvegardes automatiques du pop-up."
+  },
   "splitTitle": {
     "message": "Écran partagé",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

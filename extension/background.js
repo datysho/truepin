@@ -574,8 +574,30 @@ async function rebuildMirror(settings) {
   // races user acts (an unpin in flight looks like a missing pin and would
   // be resurrected). Mid-session the adopt+fill below is exactly enough.
   const cold = !(await isMirrorReady());
-  const canon = await getCanon();
+  let canon = await getCanon();
   if (cold && canon.length) {
+    // One-time migration heal: a canon written by an earlier version may
+    // carry mass-duplication residue baked in at its first crystallization.
+    // Users at scale have no saved set and no channel to be told about a
+    // manual cleanup - the disease signature is unmistakable, so it heals
+    // itself, with the pre-heal state parked in the autosave ring (undo).
+    const { canonHealVersion } = await chrome.storage.local.get("canonHealVersion");
+    if (!canonHealVersion) {
+      const healed = healMassDuplication(
+        canon.map((url, order) => ({ url, order })),
+        await savedSetUrls(),
+      );
+      if (healed) {
+        await writeAutoSnapshot();
+        traceDiag(`migration heal: canon ${canon.length} -> ${healed.keep.length}`);
+        canon = healed.keep.sort((a, b) => a.order - b.order).map((e) => e.url);
+        await chrome.storage.local.set({ [CANON_KEY]: { urls: canon, savedAt: Date.now() } });
+        notifyHealed();
+      }
+      await chrome.storage.local.set({
+        canonHealVersion: chrome.runtime.getManifest().version,
+      });
+    }
     await convergeToCanon(canon, settings);
     return;
   }
@@ -592,10 +614,27 @@ async function rebuildMirror(settings) {
     if (!freshInstall) {
       const authWindowId = await pinnedHomeWindow();
       if (authWindowId !== null) {
-        const authPins = (await pinnedTabsOf(authWindowId)).filter(
+        let authPins = (await pinnedTabsOf(authWindowId)).filter(
           (t) => !isEphemeralUrl(tabUrl(t)),
         );
         if (authPins.length) {
+          // The window being crystallized from can itself carry the mass
+          // residue (that is exactly how it looked in the field). Heal it
+          // BEFORE its contents become truth.
+          const healed = healMassDuplication(
+            authPins.map((t, order) => ({ url: tabUrl(t), id: t.id, order })),
+            await savedSetUrls(),
+          );
+          if (healed) {
+            await writeAutoSnapshot();
+            traceDiag(
+              `crystallize heal win=${authWindowId}: ${authPins.length} -> ${healed.keep.length} pins`,
+            );
+            await closeTabs(healed.close.map((e) => e.id));
+            const keptIds = new Set(healed.keep.map((e) => e.id));
+            authPins = authPins.filter((t) => keptIds.has(t.id));
+            notifyHealed();
+          }
           traceDiag(`crystallize canon from win=${authWindowId}: ${authPins.length} pins`);
           await convergeToCanon(
             authPins.map((t) => tabUrl(t)),
@@ -612,6 +651,84 @@ async function rebuildMirror(settings) {
   for (const w of await normalWindows()) {
     await syncWindowFill(w.id, settings);
   }
+}
+
+// --- mass-duplication healing ----------------------------------------------
+// Residue from a duplication bug has an unmistakable shape: MANY origins
+// duplicated at once - the whole set multiplied. A user's deliberate
+// same-site pins duplicate one origin, maybe two (two Notion pages, three
+// spreadsheets), never the board. When at least HEAL_MIN_ORIGINS origins
+// carry duplicates in one strip or canon, it is disease: keep one pin per
+// duplicated origin - preferring one recorded in a saved set, an explicit
+// user act - and close the rest. The pre-heal state goes into the autosave
+// ring first, so one click undoes a wrong guess, and a notification says
+// what happened. Runs only where unattended residue can become truth
+// (crystallization, one-time canon migration) - never against a live canon
+// the user is deliberately growing.
+const HEAL_MIN_ORIGINS = 3;
+
+async function savedSetUrls() {
+  const [synced, local] = await Promise.all([
+    chrome.storage.sync.get(null),
+    chrome.storage.local.get(null),
+  ]);
+  const urls = new Set();
+  for (const bag of [synced, local]) {
+    for (const [key, value] of Object.entries(bag)) {
+      if (!key.startsWith(SNAP_PREFIX) || !value || !Array.isArray(value.urls)) continue;
+      for (const url of value.urls) urls.add(url);
+    }
+  }
+  return urls;
+}
+
+// entries: [{ url, order, ...ref }] in strip/canon order. Returns null when
+// the strip does not look diseased, else { keep, close } (keep in original
+// order via the order field).
+function healMassDuplication(entries, setUrls) {
+  const byOrigin = new Map();
+  for (const entry of entries) {
+    const key = originKey(entry.url);
+    if (!byOrigin.has(key)) byOrigin.set(key, []);
+    byOrigin.get(key).push(entry);
+  }
+  const duplicated = [...byOrigin.values()].filter((list) => list.length >= 2);
+  if (duplicated.length < HEAL_MIN_ORIGINS) return null;
+  const keep = [];
+  const close = [];
+  const setPathKeys = new Set([...setUrls].map((u) => pathKey(u)));
+  for (const list of byOrigin.values()) {
+    if (list.length === 1) {
+      keep.push(list[0]);
+      continue;
+    }
+    const keeper =
+      list.find((e) => setUrls.has(e.url)) ||
+      list.find((e) => setPathKeys.has(pathKey(e.url))) ||
+      list[0];
+    keep.push(keeper);
+    for (const e of list) if (e !== keeper) close.push(e);
+  }
+  keep.sort((a, b) => a.order - b.order);
+  return { keep, close };
+}
+
+function notifyHealed() {
+  ensureI18n().then(() => {
+    chrome.notifications.clear("truepin-healed", () => {
+      void chrome.runtime.lastError;
+      chrome.notifications.create(
+        "truepin-healed",
+        {
+          type: "basic",
+          iconUrl: "icons/locked-128.png",
+          title: "TruePin",
+          message: tpI18n.t("notifHealed"),
+        },
+        checked,
+      );
+    });
+  });
 }
 
 // The persisted canon is the truth: converge every window to it with the

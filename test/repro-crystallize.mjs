@@ -167,6 +167,54 @@ try {
   } else {
     console.log("\nPASS  canon crystallized from the authoritative window; junk closed everywhere");
   }
+
+  console.log("\n== phase 2: MASS residue in the authoritative window heals at crystallization ==");
+  // Three loopback spellings = three distinct origins on one server: the
+  // mass-duplication signature (>=3 origins duplicated at once) that a
+  // duplication bug leaves and deliberate pinning never does.
+  const hosts = [base, base.replace("127.0.0.1", "localhost"), base.replace("127.0.0.1", "0.0.0.0")];
+  await waitFor("queue drained (phase 2)", async () => {
+    const d = await swEval(() => ({
+      queued: globalThis.__tpDiag.queued,
+      finished: globalThis.__tpDiag.finished,
+    }));
+    return d.queued === d.finished;
+  });
+  await sleep(2000);
+  await swEval(async () => {
+    await chrome.storage.local.remove("canonLayout");
+    return globalThis.__tpWipeState();
+  });
+  await swEval(async (id) => chrome.windows.update(id, { focused: true }), iId);
+  await sleep(400);
+  for (const h of hosts) {
+    for (const p of ["m1", "m2"]) {
+      await swEval(
+        async (args) =>
+          chrome.tabs.create({ windowId: args.iId, url: `${args.h}/${args.p}`, pinned: true, active: false }),
+        { iId, h, p },
+      );
+      await sleep(150);
+    }
+  }
+  console.log(`   seeded mass residue; pins now: ${await totalPins()}`);
+  await sleep(14_000);
+  const healedCanon = (await canonUrls()).map((u) => u.replace(/^http:\/\/[^/]+/, ""));
+  const iPins = await pinsOf(iId);
+  const bPins = await pinsOf(bId);
+  const origins = (await canonUrls()).map((u) => new URL(u).origin);
+  const uniqueOrigins = new Set(origins).size === origins.length;
+  console.log(`   healed canon: ${JSON.stringify(healedCanon)}  I=${iPins.length} B=${bPins.length}`);
+  const healOk =
+    uniqueOrigins &&
+    iPins.length === healedCanon.length &&
+    bPins.length === healedCanon.length;
+  if (!healOk) {
+    console.log(`\nFAIL  mass residue survived crystallization (origins unique=${uniqueOrigins})`);
+    process.exitCode = 1;
+  } else {
+    console.log("\nPASS  mass residue healed at crystallization: one pin per origin, all windows converged");
+  }
 } catch (e) {
   console.error("REPRO ERROR:", e.message);
   process.exitCode = 1;

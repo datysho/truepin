@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "Запобіжник: TruePin призупинив відкриття вкладок - їх з'являлося забагато поспіль. Якщо повториться, перезавантажте розширення."
   },
+  "notifHealed": {
+    "message": "TruePin вичистив масово задубльовані закріплені вкладки. Якщо щось зникло - поверніть попередній стан з «Автозбережень» у попапі."
+  },
   "splitTitle": {
     "message": "Розділений екран",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

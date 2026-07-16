@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "Parada de segurança: o TruePin pausou a abertura de guias - muitas estavam surgindo de uma vez. Se repetir, recarregue a extensão."
   },
+  "notifHealed": {
+    "message": "O TruePin limpou guias fixadas duplicadas em massa. Se algo sumiu, restaure o estado anterior pelos salvamentos automáticos no popup."
+  },
   "splitTitle": {
     "message": "Tela dividida",
     "description": "Tooltip: tab is in a split view / set contains split pairs"

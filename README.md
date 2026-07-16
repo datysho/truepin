@@ -172,6 +172,7 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - A safety stop caps how many tabs the extension will ever create per minute. If something unexpected still goes wrong, TruePin stalls and shows one notification instead of flooding the tab strip.
 - The address-bar and cross-site-link interception cannot truly cancel a navigation (MV3 has no blocking API): the page starts to change, then snaps back - a brief flash. A prerendered omnibox suggestion ("Preload pages" on) can occasionally slip through and navigate in place.
 - Cross-site is judged by the registrable domain with a small built-in heuristic, not a full public-suffix list; exotic TLD layouts may be judged same-site. Sign-in flows that must return to the page (OAuth) complete in the new tab instead - turn the link toggle off if that gets in the way.
+- If TruePin ever finds MASS-duplicated pins (many sites duplicated at once - the signature of a bug, never of deliberate pinning), it heals them where truth is being established: one pin per affected site is kept, preferring one recorded in a saved set, the previous state is parked in Autosaves for one-click undo, and a notification says what happened.
 
 ## Development
 

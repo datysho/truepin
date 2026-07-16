@@ -185,6 +185,9 @@
   "notifBreaker": {
     "message": "Parada de seguridad: TruePin pausó la apertura de pestañas; aparecían demasiadas a la vez. Si se repite, recargue la extensión."
   },
+  "notifHealed": {
+    "message": "TruePin limpió pestañas fijadas duplicadas en masa. Si falta algo, restaure el estado anterior desde los autoguardados del popup."
+  },
   "splitTitle": {
     "message": "Pantalla dividida",
     "description": "Tooltip: tab is in a split view / set contains split pairs"
