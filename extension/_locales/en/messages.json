@@ -204,6 +204,10 @@
     "message": "Rate TruePin",
     "description": "Tooltip for the popup footer star button (reviewBtn) - opens the Chrome Web Store review page."
   },
+  "footerGithub": {
+    "message": "Star on GitHub",
+    "description": "Tooltip for the popup footer GitHub button (githubBtn) - opens the repo so the user can star it."
+  },
   "optTheme": {
     "message": "Theme",
     "description": "Label for the theme select on the options page (#theme)."

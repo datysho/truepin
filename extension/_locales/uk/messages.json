@@ -202,6 +202,9 @@
   "footerReview": {
     "message": "Оцінити TruePin"
   },
+  "footerGithub": {
+    "message": "Поставити зірку на GitHub"
+  },
   "optTheme": {
     "message": "Тема"
   },

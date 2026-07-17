@@ -202,6 +202,9 @@
   "footerReview": {
     "message": "Valorar TruePin"
   },
+  "footerGithub": {
+    "message": "Dar una estrella en GitHub"
+  },
   "optTheme": {
     "message": "Tema"
   },

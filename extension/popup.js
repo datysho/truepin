@@ -18,23 +18,20 @@ function applyTheme(v) {
   else delete document.documentElement.dataset.theme;
 }
 
-// Bottom action bar. openOptions keeps its own handler in init(); donate/review
-// stay hidden until their config URLs are set, so there are never dead links.
+// Bottom action bar. openOptions keeps its own handler in init(); the github,
+// review and donate buttons stay hidden until their config URLs are set, so
+// there are never dead links.
 function initFooter() {
-  if (typeof TP_PAYPAL_URL === "undefined" || !TP_PAYPAL_URL) {
-    $("donateBtn").hidden = true;
-  } else {
-    $("donateBtn").addEventListener("click", () =>
-      chrome.tabs.create({ url: TP_PAYPAL_URL }),
-    );
-  }
-  if (typeof TP_REVIEW_URL === "undefined" || !TP_REVIEW_URL) {
-    $("reviewBtn").hidden = true;
-  } else {
-    $("reviewBtn").addEventListener("click", () =>
-      chrome.tabs.create({ url: TP_REVIEW_URL }),
-    );
-  }
+  const wire = (id, url) => {
+    if (!url) {
+      $(id).hidden = true;
+    } else {
+      $(id).addEventListener("click", () => chrome.tabs.create({ url }));
+    }
+  };
+  wire("githubBtn", typeof TP_GITHUB_URL === "undefined" ? "" : TP_GITHUB_URL);
+  wire("reviewBtn", typeof TP_REVIEW_URL === "undefined" ? "" : TP_REVIEW_URL);
+  wire("donateBtn", typeof TP_PAYPAL_URL === "undefined" ? "" : TP_PAYPAL_URL);
 }
 
 function localizeDom() {

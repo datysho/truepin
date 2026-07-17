@@ -174,6 +174,18 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - Cross-site is judged by the registrable domain with a small built-in heuristic, not a full public-suffix list; exotic TLD layouts may be judged same-site. Sign-in flows that must return to the page (OAuth) complete in the new tab instead - turn the link toggle off if that gets in the way.
 - If TruePin ever finds MASS-duplicated pins (many sites duplicated at once - the signature of a bug, never of deliberate pinning), it heals them where truth is being established: one pin per affected site is kept, preferring one recorded in a saved set, the previous state is parked in Autosaves for one-click undo, and a notification says what happened.
 
+## Support
+
+TruePin is free and open source, built and maintained by one person. No ads, no tracking, nothing paywalled - ever.
+
+If it has earned a spot in your browser, you can support the work below. It is entirely optional; it just helps keep the project moving.
+
+**[Donate via PayPal](https://www.paypal.com/donate/?hosted_button_id=88K7MWF22B2FU)** - every donor gets a permanent line in [SUPPORTERS.md](SUPPORTERS.md).
+
+Prefer the $0 route? A ⭐ on this repo or a [review on the Chrome Web Store](https://chromewebstore.google.com/detail/truepin/fkgkfmhkdgpeopigpbgohoblocpjakcf/reviews) helps just as much.
+
+Thanks for using it.
+
 ## Development
 
 `extension/` is a Manifest V3 extension with no build step:

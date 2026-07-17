@@ -1,0 +1,3 @@
+# Shows the Sponsor button on the repo. Same PayPal Donate flow the extension
+# popup uses; donors land on .github/thanks.md and can claim a SUPPORTERS.md line.
+custom: ["https://www.paypal.com/donate/?hosted_button_id=88K7MWF22B2FU"]

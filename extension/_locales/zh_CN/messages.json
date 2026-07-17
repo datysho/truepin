@@ -202,6 +202,9 @@
   "footerReview": {
     "message": "评价 TruePin"
   },
+  "footerGithub": {
+    "message": "在 GitHub 上加星"
+  },
   "optTheme": {
     "message": "主题"
   },
