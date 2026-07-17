@@ -3,7 +3,7 @@
   "name": "TruePin",
   "description": "__MSG_appDesc__",
   "default_locale": "en",
-  "version": "3.11.0",
+  "version": "3.11.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAktlAn6T68+YOoxNsByVYgugCMFPyQqx9EKgS7mi0+MeQfluiBJdcv04wqwfa5Hs2bA2a/MMScXoNIHcw9molgf/ZHow4R8SIM/Ev70S945bPfryAjEAgNjJVU+YgbCG2lhzP7LDWzyNAU4yU3p1tgT7vrzHhwKz5ul5+xWF5IlUFXihaMXVrM3M2TEeNjvVzcf7TSqnSpf5epZ6uQesWN1BlEy3A24ULeujq0refowaYWJ5Afest3Gs3n4jhL9gipbhH/kqoCL4F8UvaCcgvqgqv3Ofoxa5PcqtTuYkpsajO0ItxPtwq1fXMo/hlzFU9tshvrodLW//XjYcudDmaqQIDAQAB",
   "homepage_url": "https://github.com/datysho/truepin",
   "permissions": [

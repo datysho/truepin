@@ -235,37 +235,23 @@
         -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
         mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
       }
-      .ver {
-        text-align: center;
+      /* Family style (same as TrueTabs): version up in the header, the
+         diagnostics pill bottom-left with its note beside it. */
+      .page-head .headver {
         color: var(--muted);
         font-size: 12px;
-        margin: 20px 0 0;
+        align-self: flex-end;
+        padding-bottom: 2px;
       }
-      .linklike {
-        background: none;
-        border: none;
-        padding: 0;
-        font: inherit;
-        color: var(--muted);
-        text-decoration: underline;
-        cursor: pointer;
+      .footrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
       }
-      .linklike:hover {
-        color: var(--fg);
-      }
-      /* Wrap only the button so text-align:center centres IT; the "copied"
-         note is pulled out of flow (left:100% of the wrap) so it never
-         reserves width and tugs the button off-centre while hidden. */
-      .diag {
-        position: relative;
-        display: inline-block;
-      }
-      #diagCopied {
-        position: absolute;
-        left: 100%;
-        margin-left: 6px;
-        white-space: nowrap;
+      .footrow .note {
         color: var(--ok);
+        font-size: 12px;
       }
     </style>
   </head>
@@ -274,6 +260,7 @@
       <header class="page-head">
         <img src="icons/locked-32.png" alt="" />
         <h2>TruePin</h2>
+        <span class="headver" id="version"></span>
       </header>
       <div class="card">
         <div class="setting">
@@ -375,13 +362,10 @@
       </div>
 
       <p id="saved" data-i18n="saved"></p>
-      <p class="ver">
-        <span class="diag">
-          <button id="diagBtn" class="linklike" data-i18n="optDiag"></button>
-          <span id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
-        </span>
-      </p>
-      <p class="ver" id="version"></p>
+      <div class="footrow">
+        <button id="diagBtn" data-i18n="optDiag"></button>
+        <span class="note" id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
+      </div>
     </div>
 
     <script src="i18n.js"></script>
