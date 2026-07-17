@@ -1,0 +1,22 @@
+name: Bug report
+description: Something broke - a tab closed for good, duplicates, wrong behavior
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics dump
+      description: 'Extension Options, "Copy diagnostics" at the bottom, paste here. It carries the engine state - pinned set, groups, event trace - and no page content.'
+      render: json
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version
+      placeholder: chrome://version, first line

@@ -7,12 +7,14 @@
 **Pinned tabs, done right - a Chrome extension that makes pinned tabs impossible to close by accident.**
 
 <p>
+  <a href="https://chromewebstore.google.com/detail/truepin/fkgkfmhkdgpeopigpbgohoblocpjakcf"><img src="https://img.shields.io/chrome-web-store/v/fkgkfmhkdgpeopigpbgohoblocpjakcf?style=flat-square&color=2563eb&label=chrome%20web%20store" alt="Chrome Web Store"></a>
   <img src="https://img.shields.io/badge/Chrome-Manifest_V3-2563eb?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-2563eb?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/version-3.9.0-2563eb?style=flat-square" alt="version 3.9.0">
   <img src="https://img.shields.io/badge/network-none-16a34a?style=flat-square" alt="no network requests">
   <img src="https://img.shields.io/badge/languages-8-2563eb?style=flat-square" alt="8 languages">
 </p>
+
+**[Install from the Chrome Web Store →](https://chromewebstore.google.com/detail/truepin/fkgkfmhkdgpeopigpbgohoblocpjakcf)**
 
 <br>
 
@@ -57,19 +59,6 @@ Reloading and navigating are free - the tab is not going anywhere, after all. Un
 </div>
 
 Auto-protect pinned tabs, mirror across windows, autosaves, the reopen notification, and the two keep-its-page interceptions (address bar, cross-site links) are each their own toggle. A "Copy diagnostics" link at the bottom puts the engine's full state on the clipboard for a bug report. The toolbar icon can match the browser UI in gray or stay in color, the theme follows the system or locks to light / dark, and the language auto-detects with a manual override.
-
-## Native - light, dark, or auto
-
-The whole UI is Chrome's own, in eight languages: **en, ru, uk, de, fr, es, pt, zh**.
-
-<div align="center">
-<table>
-<tr>
-<td><img src="store/screenshots/store-popup-light.png" width="380" alt="Popup in light theme"></td>
-<td><img src="store/screenshots/store-popup-dark.png" width="380" alt="Popup in dark theme"></td>
-</tr>
-</table>
-</div>
 
 ---
 
@@ -148,13 +137,18 @@ Within that limit TruePin preserves everything it can:
 
 ## Install
 
-A Chrome Web Store release is on the way. For now, load it unpacked - it takes a minute:
+**[Chrome Web Store](https://chromewebstore.google.com/detail/truepin/fkgkfmhkdgpeopigpbgohoblocpjakcf)** - one click, updates arrive automatically. Pinned tabs are protected the moment it lands; for settings, right-click the icon and choose **Options**.
+
+<details>
+<summary><b>From source (development)</b></summary>
+
+<br>
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and pick the `extension/` folder of this repository.
-3. Done - pinned tabs are protected automatically. For settings, right-click the icon and choose **Options**.
+3. After a `git pull` with changes, hit **Reload** on the extension card. If the repository folder moves, remove the extension and load it again from the new path.
 
-After a `git pull` with changes, hit **Reload** on the extension card. If the repository folder moves, remove the extension and load it again from the new path.
+</details>
 
 ## Privacy
 
@@ -174,6 +168,26 @@ Full policy: [PRIVACY.md](PRIVACY.md).
 - Cross-site is judged by the registrable domain with a small built-in heuristic, not a full public-suffix list; exotic TLD layouts may be judged same-site. Sign-in flows that must return to the page (OAuth) complete in the new tab instead - turn the link toggle off if that gets in the way.
 - If TruePin ever finds MASS-duplicated pins (many sites duplicated at once - the signature of a bug, never of deliberate pinning), it heals them where truth is being established: one pin per affected site is kept, preferring one recorded in a saved set, the previous state is parked in Autosaves for one-click undo, and a notification says what happened.
 
+## Development
+
+`extension/` is a Manifest V3 extension with no build step:
+
+- `background.js` - reopen-protection, mirror groups, sets and autosaves
+- `popup.*` and `options.*` - the UI
+- `i18n.js` + `_locales/` - 8 languages
+- `icons/`
+
+**Tests** - 42 end-to-end scenarios on Puppeteer against a real Chrome for Testing: every close method undone, mirroring across three windows, cold-start convergence without duplicates, snapshot diff-restore, the split-view rules, the keeps-its-page interceptions, mass-duplication healing, localization, and a clean service worker log. Plus four standalone regression repros:
+
+```bash
+cd test && npm install && npm test          # HEADFUL=1 npm test to watch
+npm run test:canon      # fresh-profile regression: duplicates never multiply
+```
+
+## License
+
+[MIT](LICENSE).
+
 ## Support
 
 TruePin is free and open source, built and maintained by one person. No ads, no tracking, nothing paywalled - ever.
@@ -184,29 +198,7 @@ If it has earned a spot in your browser, you can support the work below. It is e
 
 Prefer the $0 route? A ⭐ on this repo or a [review on the Chrome Web Store](https://chromewebstore.google.com/detail/truepin/fkgkfmhkdgpeopigpbgohoblocpjakcf/reviews) helps just as much.
 
-Thanks for using it.
-
-## Development
-
-`extension/` is a Manifest V3 extension with no build step:
-
-- `background.js` - reopen-protection, mirror groups, sets and autosaves
-- `popup.*` and `options.*` - the UI
-- `i18n.js` + `_locales/` - 8 languages
-- `icons/`
-
-**Tests** - end-to-end on Puppeteer against a real Chrome for Testing, 33 scenarios (immortality under every close method, the reopen notification, free reload and navigation, the unpin-then-close path, manual lock carried over, mirroring across three windows, adoption without duplicates, no duplication on a browser-restart cold start, popup windows never filled, locked tabs pulled to the front, the split-view rules, snapshot diff-restore, autosave triggers, localization, and a clean service worker log):
-
-```bash
-cd test && npm install && npm test          # HEADFUL=1 npm test to watch
-npm run test:multiply   # fresh-profile regression: duplicates never multiply
-```
-
-## License
-
-[MIT](LICENSE).
-
 <div align="center">
 <br>
-<sub>Free and complete - nothing is paywalled, ever.</sub>
+<sub>Thanks for using it. 💛</sub>
 </div>
