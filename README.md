@@ -19,8 +19,8 @@
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="store/screenshots/store-popup-dark.png">
-  <img src="store/screenshots/store-popup-light.png" width="760" alt="TruePin popup: pinned tabs with locks, a saved set, and autosaves">
+  <source media="(prefers-color-scheme: dark)" srcset="store/social-preview-dark.png">
+  <img src="store/social-preview.png" width="800" alt="TruePin - pinned tabs that can't be closed by accident: the popup with pinned and locked tabs">
 </picture>
 
 </div>
