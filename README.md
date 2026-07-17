@@ -184,6 +184,17 @@ cd test && npm install && npm test          # HEADFUL=1 npm test to watch
 npm run test:canon      # fresh-profile regression: duplicates never multiply
 ```
 
+## Family
+
+TruePin protects your pinned tabs. [TrueTabs](https://github.com/datysho/truetabs)
+runs everything else: no duplicate tabs, stale tabs auto-archived (always
+undoable), tabs grouped by site or by AI topic. The names mirror the technical
+contract: **TrueTabs never closes, moves, groups or archives a pinned tab** -
+the two coexist by construction.
+
+- [TrueTabs](https://github.com/datysho/truetabs) - the Arc-style tab butler
+  for Chrome.
+
 ## License
 
 [MIT](LICENSE).
