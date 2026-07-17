@@ -13,7 +13,7 @@ the store owns the production id; `manifest.json` sits at the zip root).
 **Name:** TruePin
 
 **Summary (132 characters max):**
-Protect pinned tabs from accidental closing, and save and restore sets of pinned tabs across your devices.
+Protect pinned tabs from accidental closing, lock any tab, and save and restore sets of pinned tabs across your devices.
 
 **Category:** Workflow & Planning
 
@@ -29,6 +29,8 @@ it first - deliberate, never accidental.
 
 Features:
 - Accidental-close protection for pinned tabs - closes are instantly reversed.
+- Lock any regular tab too - per-tab protection until you close Chrome.
+- Protected tabs keep their page: a typed address or a link to another site opens in a tab next to it (each behavior has its own toggle).
 - Mirror pinned tabs across all your windows; pin, unpin and close stay in sync (incognito windows are left alone).
 - Save named sets of pinned tabs and restore them in one click.
 - Sets sync across your devices through your Chrome account.
@@ -40,7 +42,6 @@ analytics and no ads, and sends nothing anywhere. Privacy policy:
 https://github.com/datysho/truepin/blob/main/PRIVACY.md
 
 **Privacy policy URL:** https://github.com/datysho/truepin/blob/main/PRIVACY.md
-(resolves once the repository is public)
 
 ## Privacy practices tab
 
@@ -78,7 +79,8 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 
 ## After approval
 
-- Copy the assigned extension id into `TP_CWS_ID` (config.js) to light up the
-  rate/review button, then publish an update.
-- When a PayPal.me handle is available, set `TP_PAYPAL_URL` (config.js) to light
-  up the donate button.
+Done post-publish (16.07.2026): the assigned id `fkgkfmhkdgpeopigpbgohoblocpjakcf`
+is in `TP_CWS_ID` and the PayPal Donate URL is in `TP_PAYPAL_URL` - the rate and
+donate buttons in the popup footer are live. The donation itself stays out of
+this listing on purpose: the ask lives after the value (popup footer, README,
+GitHub Sponsor button), never on the storefront.
