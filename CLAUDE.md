@@ -14,6 +14,7 @@ TruePin - Chrome MV3 extension that makes pinned tabs trustworthy: pins survive 
 Full pipeline (change classes, gates, release checklist): `~/Clemond/system/dev-process.md`.
 Before dev work: read the Дистиллят of `~/Clemond/system/lessons/lessons-dev.md`; grep `~/Clemond/system/lessons/` for the symptom before fixing any bug.
 Feature specs go to `docs/specs/` from now on (v3.x predates the spec-first practice); the spec is approved before build and is the single source across the boundary - divergence goes back into the spec.
+Version bumps on EVERY landed change - patch for a fix, minor for a feature, major for a break. The version marks the build, not the shipment: waiting for a release day means two different builds answer to one number. A bump runs the package build in the same block of work (a stale zip is a store rejection).
 Release: fill the "Submission checklist" in `STORE_LISTING.md`; dogfood and CWS submit are Michael's steps.
 
 ## QA invariants (non-negotiable, survive without the vault)
