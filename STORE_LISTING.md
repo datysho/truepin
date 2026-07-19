@@ -77,6 +77,23 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
+## What's new in 3.12.0 (update submission)
+
+User-visible, for the version notes if the form asks:
+- Export/import: Options can write settings and named sets to a JSON file
+  and read them back; sets merge by name, never deleting ones the file does
+  not mention. No secrets exist in TruePin, so the file is clean.
+- A locked tab you place into a tab group yourself now stays there - the
+  "Always keep at the front" pull resumes when it leaves the group.
+- Plays in concert with TrueTabs when both are installed: TruePin announces
+  which tabs are locked to the front, TrueTabs reserves that stretch of the
+  strip (pinned, then locked, then groups). Either works alone, unchanged.
+- Updates from the Web Store now apply silently at a quiet moment; settings
+  survive every version.
+- Post-publish TODO carried by the release checklist: when TrueTabs gets its
+  own Web Store id, add it to FAMILY_IDS in background.js (the dev-key id
+  already works for unpacked installs).
+
 ## After approval
 
 Done post-publish (16.07.2026): the assigned id `fkgkfmhkdgpeopigpbgohoblocpjakcf`

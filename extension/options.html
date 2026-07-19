@@ -366,9 +366,16 @@
         <button id="diagBtn" data-i18n="optDiag"></button>
         <span class="note" id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
       </div>
+      <div class="footrow">
+        <button id="exportBtn" data-i18n="dataExport"></button>
+        <button id="importBtn" data-i18n="dataImport"></button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+        <span class="note" id="dataNote" style="visibility: hidden"></span>
+      </div>
     </div>
 
     <script src="i18n.js"></script>
+    <script src="platform.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

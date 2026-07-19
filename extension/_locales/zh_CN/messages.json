@@ -228,5 +228,20 @@
   },
   "lockFrontAlways": {
     "message": "始终保持在最前"
+  },
+  "dataExport": {
+    "message": "导出设置与集合"
+  },
+  "dataImport": {
+    "message": "从文件导入"
+  },
+  "dataExported": {
+    "message": "已导出。"
+  },
+  "dataImported": {
+    "message": "已导入。"
+  },
+  "dataFailed": {
+    "message": "不是 TruePin 导出文件。"
   }
 }

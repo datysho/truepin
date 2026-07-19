@@ -235,5 +235,20 @@
   },
   "lockFrontAlways": {
     "message": "Always keep at the front"
+  },
+  "dataExport": {
+    "message": "Export settings and sets"
+  },
+  "dataImport": {
+    "message": "Import from file"
+  },
+  "dataExported": {
+    "message": "Exported."
+  },
+  "dataImported": {
+    "message": "Imported."
+  },
+  "dataFailed": {
+    "message": "Not a TruePin export file."
   }
 }

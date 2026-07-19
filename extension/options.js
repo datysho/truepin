@@ -1,16 +1,7 @@
 // TruePin - options page. Saves on change, no Save button.
-const DEFAULTS = {
-  autoLockPinned: true,
-  mirrorPinned: true,
-  autoSnapshot: true,
-  notifyReopen: true,
-  navRedirect: true,
-  linkRedirect: true,
-  iconStyle: "color",
-  lockToFront: "off",
-  theme: "auto",
-  language: "auto",
-};
+// Defaults and validation come from the shared platform module - the page
+// carried its own drifting copy once (theme lived only here).
+const DEFAULTS = tpPlatform.DEFAULTS;
 const FIELDS = Object.keys(DEFAULTS);
 
 // "auto" -> prefers-color-scheme governs; "light"/"dark" force via data-theme.
@@ -51,22 +42,26 @@ async function load() {
 let savedTimer = null;
 
 async function save() {
-  const settings = {};
+  const patch = {};
   for (const field of FIELDS) {
     const el = document.getElementById(field);
     const kind = fieldKind(field);
     if (kind === "bool") {
-      settings[field] = el.checked;
+      patch[field] = el.checked;
     } else if (kind === "num") {
       const value = Number(el.value);
-      settings[field] =
+      patch[field] =
         Number.isFinite(value) && value > 0
           ? Math.max(3, Math.min(120, Math.round(value)))
           : DEFAULTS[field];
     } else {
-      settings[field] = el.value;
+      patch[field] = el.value;
     }
   }
+  // Merge over the RAW stored object, never replace it: keys a newer TruePin
+  // added on a synced machine must survive this page's write.
+  const { settings: raw } = await chrome.storage.sync.get("settings");
+  const settings = tpPlatform.normalizeSettings({ ...(raw || {}), ...patch });
   await chrome.storage.sync.set({ settings });
   applyTheme(settings.theme);
   await localize(); // language may have changed
@@ -82,6 +77,54 @@ for (const field of FIELDS) {
   document.getElementById(field).addEventListener("change", save);
 }
 localize().then(load);
+
+// --- backup: export / import ------------------------------------------------
+// One clean JSON file: settings + named sets. No secrets exist in TruePin,
+// so there is nothing to opt into. Import is additive-by-name for sets and
+// goes through the engine (validated, serialized with everything else).
+function dataNote(key) {
+  const note = document.getElementById("dataNote");
+  note.textContent = tpI18n.t(key);
+  note.style.visibility = "visible";
+  setTimeout(() => {
+    note.style.visibility = "hidden";
+  }, 2500);
+}
+
+document.getElementById("exportBtn").addEventListener("click", async () => {
+  const payload = await chrome.runtime.sendMessage({ type: "ui:exportData" });
+  if (!payload || payload.error) return dataNote("dataFailed");
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `truepin-settings-${payload.version}-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  dataNote("dataExported");
+});
+
+document.getElementById("importBtn").addEventListener("click", () => {
+  document.getElementById("importFile").click();
+});
+
+document.getElementById("importFile").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ""; // re-selecting the same file must fire again
+  if (!file) return;
+  if (file.size > tpPlatform.IMPORT_MAX_BYTES) return dataNote("dataFailed");
+  let parsed = null;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    return dataNote("dataFailed");
+  }
+  const result = await chrome.runtime.sendMessage({ type: "ui:importData", payload: parsed });
+  if (!result || !result.ok) return dataNote("dataFailed");
+  await localize();
+  await load(); // repaint the controls from the imported truth
+  dataNote("dataImported");
+});
 
 // One-click diagnostics: full engine state to the clipboard, so a weirdness
 // report can carry the evidence without opening a console.

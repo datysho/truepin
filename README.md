@@ -152,7 +152,7 @@ Within that limit TruePin preserves everything it can:
 
 ## Privacy
 
-TruePin runs entirely in your browser. It **makes no network requests** and has no analytics, no tracking and no ads - nothing is ever sent to the developer or anyone else. It has no host permissions and no content scripts, so it never reads the content of your pages. Named sets travel only through your own Chrome Sync, under Google's terms.
+TruePin runs entirely in your browser. It **makes no network requests** and has no analytics, no tracking and no ads - nothing is ever sent to the developer or anyone else. It has no host permissions and no content scripts, so it never reads the content of your pages. Named sets travel only through your own Chrome Sync, under Google's terms. Settings and sets sync between your browsers the same way; the export button in Options writes them to a plain JSON file on your machine (there are no secrets in TruePin, so the file is clean), and import merges sets by name without ever deleting ones the file does not mention. Updates from the Web Store apply silently at a quiet moment - your settings survive every version.
 
 Full policy: [PRIVACY.md](PRIVACY.md).
 
@@ -191,6 +191,14 @@ runs everything else: no duplicate tabs, stale tabs auto-archived (always
 undoable), tabs grouped by site or by AI topic. The names mirror the technical
 contract: **TrueTabs never closes, moves, groups or archives a pinned tab** -
 the two coexist by construction.
+
+Since v3.12.0 the two also speak: TruePin answers which regular tabs are
+locked to the front, and TrueTabs reserves that stretch of the strip - the
+agreed order is *pinned, then locked, then groups, then the rest*. Only these
+two extensions can talk (browser-attested ids; every other sender gets
+silence), and either one works exactly as before when the other is absent.
+A locked tab you place into a tab group yourself stays there - the front
+pull resumes when it leaves the group.
 
 - [TrueTabs](https://github.com/datysho/truetabs) - the Arc-style tab butler
   for Chrome.

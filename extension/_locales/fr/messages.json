@@ -228,5 +228,20 @@
   },
   "lockFrontAlways": {
     "message": "Toujours garder au début"
+  },
+  "dataExport": {
+    "message": "Exporter réglages et ensembles"
+  },
+  "dataImport": {
+    "message": "Importer depuis un fichier"
+  },
+  "dataExported": {
+    "message": "Exporté."
+  },
+  "dataImported": {
+    "message": "Importé."
+  },
+  "dataFailed": {
+    "message": "Ce n'est pas un fichier d'export TruePin."
   }
 }

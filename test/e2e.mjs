@@ -1887,6 +1887,179 @@ async function main() {
     assert(zh === "保存", `chinese message (got "${zh}")`);
   });
 
+  // ---- family interop + settings platform (v3.12.0) -------------------------
+  const TT_DEV_ID = "kidmlipfadbjifiaokampaemiadnngfl"; // TrueTabs, allowlisted sibling
+
+  await test("family: a locked tab inside a user group is not yanked to the front", async () => {
+    step("settings: lockToFront=always");
+    await setLockFront("always");
+    await sleep(700);
+    const w = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/fg-a" });
+      const [locked] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/fg-b", active: false });
+      await chrome.tabs.create({ windowId: win.id, url: base + "/fg-c", active: false });
+      return { winId: win.id, lockedId: locked.id };
+    }, baseUrl);
+    await sleep(800);
+    await swEval((id) => globalThis.truePinToggle(id), w.lockedId);
+    await sleep(700);
+    step("the user drags the locked tab to the back and groups it");
+    await swEval(async (id) => {
+      await chrome.tabs.move(id, { index: 2 });
+      await chrome.tabs.group({ tabIds: [id] });
+    }, w.lockedId);
+    await sleep(1200); // give the 200ms enforcer every chance to misbehave
+    const t = await swEval((id) => chrome.tabs.get(id), w.lockedId);
+    assert(t.groupId !== -1, "still in the user's group");
+    assert(t.index === 2, `not yanked to the front (index ${t.index})`);
+    step("leaving the group re-enters the front cluster");
+    await swEval((id) => chrome.tabs.ungroup([id]), w.lockedId);
+    await waitFor(
+      "re-enforced to the front",
+      async () => (await swEval(async (id) => (await chrome.tabs.get(id)).index, w.lockedId)) === 0,
+      5000,
+      200,
+    );
+    step("cleanup");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
+    await setLockFront("off");
+    await sleep(500);
+  });
+
+  await test("family: the responder answers the contract shape for the sibling", async () => {
+    step("settings: lockToFront=always, one locked loose tab + one locked grouped tab");
+    await setLockFront("always");
+    await sleep(700);
+    const w = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/fr-a" });
+      const [a] = await chrome.tabs.query({ windowId: win.id });
+      const b = await chrome.tabs.create({ windowId: win.id, url: base + "/fr-b", active: false });
+      return { winId: win.id, aId: a.id, bId: b.id };
+    }, baseUrl);
+    await sleep(800);
+    await swEval((id) => globalThis.truePinToggle(id), w.aId);
+    await swEval((id) => globalThis.truePinToggle(id), w.bId);
+    await sleep(700);
+    await swEval((id) => chrome.tabs.group({ tabIds: [id] }), w.bId);
+    await sleep(600);
+    const resp = await swEval(
+      (sid) => globalThis.__tpFamilyHandle({ v: 1, type: "family:lockedFront:get" }, sid),
+      TT_DEV_ID,
+    );
+    assert(resp && resp.v === 1 && resp.mode === "always", "contract shape");
+    assert(resp.tabIds.includes(w.aId), "the loose locked tab is in the zone");
+    assert(!resp.tabIds.includes(w.bId), "the grouped locked tab is the user's layout, not the zone");
+    step("cleanup");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), w.winId);
+    await setLockFront("off");
+    await sleep(500);
+  });
+
+  await test("family: the router ignores strangers and alien messages", async () => {
+    const stranger = await swEval(
+      (sid) => globalThis.__tpFamilyHandle({ v: 1, type: "family:lockedFront:get" }, sid),
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    assert(stranger === null, "a stranger gets silence");
+    const alienType = await swEval(
+      (sid) => globalThis.__tpFamilyHandle({ v: 1, type: "ui:diagnostics" }, sid),
+      TT_DEV_ID,
+    );
+    assert(alienType === null, "alien types are not routed");
+    const alienVersion = await swEval(
+      (sid) => globalThis.__tpFamilyHandle({ v: 2, type: "family:lockedFront:get" }, sid),
+      TT_DEV_ID,
+    );
+    assert(alienVersion === null, "unknown versions are ignored");
+  });
+
+  await test("platform: unknown future keys survive a settings write", async () => {
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: { iconStyle: "mono", futureKnob: "keep-me" },
+      }),
+    );
+    await swEval(() => globalThis.__tpUiCall({ type: "ui:setAutoLock", on: false }));
+    const raw = await swEval(async () => (await chrome.storage.sync.get("settings")).settings);
+    assert(raw.futureKnob === "keep-me", "the newer version's key survived the write");
+    assert(raw.autoLockPinned === false, "the patch landed");
+    assert(raw.iconStyle === "mono", "existing values kept");
+    await swEval(() => globalThis.__tpUiCall({ type: "ui:setAutoLock", on: true }));
+  });
+
+  await test("platform: reads normalize a poisoned store", async () => {
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: { lockToFront: "banana", autoLockPinned: "yes", language: 42 },
+      }),
+    );
+    const settings = await swEval(() => getSettings());
+    assert(settings.lockToFront === "off", "bad enum degrades to default");
+    assert(settings.autoLockPinned === true, "bad boolean degrades to default");
+    assert(settings.language === "auto", "bad string degrades to default");
+    await swEval(() => chrome.storage.sync.remove("settings"));
+  });
+
+  await test("platform: export-import round trip, sets additive by name", async () => {
+    step("seed settings and a named set");
+    await swEval(async () => {
+      // Earlier tests leave their own snapshots in sync - a clean slate makes
+      // the additive-by-name arithmetic exact.
+      const all = await chrome.storage.sync.get(null);
+      const snaps = Object.keys(all).filter((k) => k.startsWith("snap:"));
+      if (snaps.length) await chrome.storage.sync.remove(snaps);
+      await chrome.storage.sync.set({
+        settings: { iconStyle: "mono", lockToFront: "onLock" },
+        "snap:Alpha": { urls: ["https://a.example/1", "https://a.example/2"], savedAt: 1 },
+      });
+    });
+    const exported = await swEval(() => globalThis.__tpUiCall({ type: "ui:exportData" }));
+    assert(exported.format === "truepin-settings" && exported.schema === 1, "export envelope");
+    assert(exported.sets.Alpha && exported.sets.Alpha.urls.length === 2, "set exported");
+    step("wipe, plant an unrelated set, import back");
+    await swEval(async () => {
+      await chrome.storage.sync.remove(["settings", "snap:Alpha"]);
+      await chrome.storage.sync.set({ "snap:Beta": { urls: ["https://b.example/1"], savedAt: 2 } });
+    });
+    const result = await swEval(
+      (payload) => globalThis.__tpUiCall({ type: "ui:importData", payload }),
+      exported,
+    );
+    assert(result && result.ok && result.sets === 1, "import applied");
+    const after = await swEval(async () => await chrome.storage.sync.get(null));
+    assert(after.settings.iconStyle === "mono" && after.settings.lockToFront === "onLock", "settings restored");
+    assert(after["snap:Alpha"] && after["snap:Alpha"].urls.length === 2, "set restored");
+    assert(after["snap:Beta"], "the unmentioned set survived - additive by name");
+    step("cleanup");
+    await swEval(() => chrome.storage.sync.remove(["settings", "snap:Alpha", "snap:Beta"]));
+  });
+
+  await test("platform: import rejects a foreign file readably", async () => {
+    const result = await swEval(() =>
+      globalThis.__tpUiCall({ type: "ui:importData", payload: { format: "not-ours" } }),
+    );
+    assert(result && result.ok === false && result.error === "format", "readable reject");
+  });
+
+  await test("platform: a deferred update applies only at a quiet moment", async () => {
+    await swEval(() => chrome.storage.session.set({ updatePending: "9.9.9", mirrorReady: false }));
+    assert(
+      (await swEval(() => globalThis.__tpTryApplyUpdate(true))) === "blocked:mirror",
+      "cold convergence blocks the apply",
+    );
+    await swEval(() => chrome.storage.session.set({ mirrorReady: true }));
+    assert(
+      (await swEval(() => globalThis.__tpTryApplyUpdate(true))) === "applied",
+      "quiet moment applies (dry run)",
+    );
+    await swEval(() => chrome.storage.session.remove("updatePending"));
+    assert(
+      (await swEval(() => globalThis.__tpTryApplyUpdate(true))) === "none",
+      "no pending update, no action",
+    );
+  });
+
   await test("service worker: no unchecked runtime errors during the run", async () => {
     step("settle");
     await sleep(600);

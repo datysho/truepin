@@ -228,5 +228,20 @@
   },
   "lockFrontAlways": {
     "message": "Immer vorne halten"
+  },
+  "dataExport": {
+    "message": "Einstellungen und Sets exportieren"
+  },
+  "dataImport": {
+    "message": "Aus Datei importieren"
+  },
+  "dataExported": {
+    "message": "Exportiert."
+  },
+  "dataImported": {
+    "message": "Importiert."
+  },
+  "dataFailed": {
+    "message": "Keine TruePin-Exportdatei."
   }
 }

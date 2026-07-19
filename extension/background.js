@@ -41,18 +41,12 @@
 
 importScripts("i18n.js");
 importScripts("config.js");
+importScripts("platform.js");
 
-const DEFAULTS = {
-  autoLockPinned: true,
-  mirrorPinned: true,
-  autoSnapshot: true,
-  notifyReopen: true,
-  navRedirect: true, // address-bar navigation in a protected tab forks to a new tab
-  linkRedirect: true, // cross-site link clicks in a protected tab fork to a new tab
-  iconStyle: "color", // "color" | "mono" (match browser UI)
-  lockToFront: "off", // "off" | "onLock" | "always" - pull locked regular tabs to the front
-  language: "auto",
-};
+// One source of truth for defaults and validation - shared verbatim with the
+// options page (platform.js). The local copy this replaced had already
+// drifted from the page's copy once (theme lived only there).
+const DEFAULTS = tpPlatform.DEFAULTS;
 // Chrome unpins a pinned tab moments before closing it, firing onUpdated
 // {pinned:false} and only then onRemoved. Within this window an unpin does
 // not yet count as "the user removed protection".
@@ -110,7 +104,19 @@ function enqueue(job, label = "job") {
 
 async function getSettings() {
   const { settings } = await chrome.storage.sync.get("settings");
-  return { ...DEFAULTS, ...(settings || {}) };
+  // Normalize on every read: types and enums are validated, a poisoned store
+  // degrades to defaults instead of poisoning every consumer downstream.
+  return tpPlatform.normalizeSettings(settings);
+}
+
+// The single write path for settings. Reads raw, overlays the patch,
+// normalizes, writes - and because normalize passes unknown keys through, a
+// NEWER version's keys survive this version's write on a synced profile.
+async function writeSettings(patch) {
+  const { settings: raw } = await chrome.storage.sync.get("settings");
+  const next = tpPlatform.normalizeSettings({ ...(raw || {}), ...patch });
+  await chrome.storage.sync.set({ settings: next });
+  return next;
 }
 
 // --- i18n ------------------------------------------------------------------
@@ -849,7 +855,39 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
   ensureColdBootstrap();
 });
-chrome.runtime.onStartup.addListener(() => ensureColdBootstrap());
+chrome.runtime.onStartup.addListener(() => {
+  ensureColdBootstrap();
+  broadcastLockedFront(); // the sibling re-queries at its settle; this is the early hint
+});
+
+// --- update applier ---------------------------------------------------------
+// Chrome downloads CWS updates in the background and applies them when the
+// extension goes idle; a busy worker or an open page can defer that
+// indefinitely. This closes the tail: apply the pending update at the first
+// QUIET moment - mirror converged, none of our pages open. No "update ready"
+// UI, ever: the butler updates himself. Deferred attempts retry on every
+// natural worker wake (this file re-executes) - no alarm needed.
+// Spec: docs/specs/settings-platform.md.
+async function tryApplyUpdate(dry = false) {
+  const { updatePending } = await chrome.storage.session.get("updatePending");
+  if (!updatePending) return "none";
+  const { mirrorReady } = await chrome.storage.session.get("mirrorReady");
+  if (!mirrorReady) return "blocked:mirror"; // cold convergence in flight
+  const contexts = await chrome.runtime
+    .getContexts({ contextTypes: ["TAB", "POPUP"] })
+    .catch(() => []);
+  if (contexts && contexts.length) return "blocked:pages"; // the user is in our pages
+  if (!dry) chrome.runtime.reload();
+  return "applied";
+}
+globalThis.__tpTryApplyUpdate = (dry) => tryApplyUpdate(dry);
+
+chrome.runtime.onUpdateAvailable.addListener((details) => {
+  chrome.storage.session
+    .set({ updatePending: details.version || true })
+    .then(() => tryApplyUpdate());
+});
+tryApplyUpdate(); // worker wake = natural retry for a deferred update
 
 // Settings changed (options page) - recompute every tab, reload language.
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -861,6 +899,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (settings.lockToFront === "always") {
       for (const w of await normalWindows()) await enforceLockedFront(w.id);
     }
+    broadcastLockedFront(); // mode may have flipped: tell the sibling
   }, "settings-changed");
 });
 
@@ -1051,6 +1090,9 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.pinned !== undefined) scheduleEnforceLockedFront(tab.windowId);
+  // Leaving a tab group re-enters the front cluster (joining one leaves it -
+  // the same enforcement pass reads membership and skips). family-interop.
+  if (changeInfo.groupId !== undefined) scheduleEnforceLockedFront(tab.windowId);
   const relevant =
     changeInfo.pinned !== undefined ||
     changeInfo.status === "loading" ||
@@ -1492,8 +1534,19 @@ async function isNormalWindow(windowId) {
   return !!win && win.type === "normal" && !win.incognito;
 }
 
+// A locked tab the USER placed into a tab group keeps its page protection
+// but stops being pulled to the front: group membership is the user's own
+// layout decision, and yanking the tab out of its group's row fights the
+// user, not other software. It re-enters the front cluster when it leaves
+// the group. (family-interop)
+function inUserGroup(tab) {
+  return tab.groupId !== -1 && tab.groupId != null;
+}
+
 async function moveLockedToFront(tab) {
-  if (!tab || tab.pinned || isSplitTab(tab) || tab.windowId === undefined) return;
+  if (!tab || tab.pinned || isSplitTab(tab) || inUserGroup(tab) || tab.windowId === undefined) {
+    return;
+  }
   if (!(await isNormalWindow(tab.windowId))) return;
   const pinned = (await quiet(chrome.tabs.query, { windowId: tab.windowId, pinned: true })) || [];
   await quiet(chrome.tabs.move, tab.id, { index: pinned.length });
@@ -1510,7 +1563,7 @@ async function enforceLockedFront(windowId) {
   const pinnedCount = tabs.filter((t) => t.pinned).length;
   const locked = [];
   for (const t of tabs) {
-    if (t.pinned || isSplitTab(t)) continue;
+    if (t.pinned || isSplitTab(t) || inUserGroup(t)) continue;
     const st = await getTabState(t.id);
     if (st && st.manual === true) locked.push(t);
   }
@@ -1520,6 +1573,7 @@ async function enforceLockedFront(windowId) {
   for (let i = 0; i < locked.length; i++) {
     await quiet(chrome.tabs.move, locked[i].id, { index: pinnedCount + i });
   }
+  broadcastLockedFront(); // the zone moved: tell the sibling
 }
 
 const lockFrontTimers = {};
@@ -1538,6 +1592,67 @@ chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
 chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
   scheduleEnforceLockedFront(attachInfo.newWindowId);
 });
+
+// --- family interop (TrueTabs) ---------------------------------------------
+// One message family over onMessageExternal, allowlisted to the sibling's
+// browser-attested ids. TrueTabs asks who is locked-to-front and reserves
+// that zone in its layout; TruePin stays the zone's enforcer. Either side
+// absent = silence and today's standalone behavior - a contract of graceful
+// degradation, not coupling. Spec: docs/specs/family-interop.md (canonical
+// copy in the TrueTabs repo).
+const FAMILY_IDS = new Set([
+  "kidmlipfadbjifiaokampaemiadnngfl", // TrueTabs, dev-key id (fixed by its manifest key)
+  // TrueTabs' CWS id joins this list right after its first publication
+  // (release-checklist line) - ids are stable, never patterns.
+]);
+
+async function lockedFrontPayload() {
+  const settings = await getSettings();
+  const mode = settings.lockToFront;
+  const tabIds = [];
+  if (mode === "always") {
+    const wins = (await quiet(chrome.windows.getAll, { windowTypes: ["normal"] })) || [];
+    for (const win of wins) {
+      if (win.incognito) continue;
+      const tabs = (await quiet(chrome.tabs.query, { windowId: win.id })) || [];
+      for (const t of tabs) {
+        if (t.pinned || isSplitTab(t) || inUserGroup(t)) continue;
+        const st = await getTabState(t.id);
+        if (st && st.manual === true) tabIds.push(t.id);
+      }
+    }
+  }
+  return { v: 1, tabIds, mode };
+}
+
+// Plain async on purpose: broadcast is called from inside queue jobs
+// (enforce, toggle) and a nested enqueue would deadlock the serializer. It
+// only reads state and fires messages - nothing here mutates shared keys.
+function broadcastLockedFront() {
+  lockedFrontPayload()
+    .then((payload) => {
+      const msg = { type: "family:lockedFront:changed", ...payload };
+      for (const id of FAMILY_IDS) {
+        try {
+          chrome.runtime.sendMessage(id, msg, () => void chrome.runtime.lastError);
+        } catch {
+          // sibling not installed: exactly the silence the contract wants
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function handleFamilyMessage(msg, senderId, sendResponse) {
+  if (!senderId || !FAMILY_IDS.has(senderId)) return false; // strangers get silence
+  if (!msg || msg.v !== 1 || msg.type !== "family:lockedFront:get") return false;
+  lockedFrontPayload().then(sendResponse);
+  return true; // async response
+}
+
+chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) =>
+  handleFamilyMessage(msg, sender.id, sendResponse),
+);
 
 // --- snapshots -----------------------------------------------------------------
 function snapshotFromTabs(allTabs) {
@@ -1901,6 +2016,7 @@ async function toggleTab(tab) {
   if (settings.lockToFront !== "off" && state.manual === true && !tab.pinned) {
     await moveLockedToFront(tab);
   }
+  broadcastLockedFront(); // lock set changed: tell the sibling
   return state;
 }
 
@@ -1911,6 +2027,14 @@ globalThis.truePinToggle = async (tabId) => {
   return enqueue(() => toggleTab(tab), "toggle-test");
 };
 globalThis.__tpUiCall = (request) => enqueue(() => handleUi(request), `${request.type}-test`);
+// Family interop, testable without a second extension in the harness: the
+// payload builder and the external router with a chosen sender id.
+globalThis.__tpFamilyPayload = () => lockedFrontPayload();
+globalThis.__tpFamilyHandle = (msg, senderId) =>
+  new Promise((resolve) => {
+    const handled = handleFamilyMessage(msg, senderId, resolve);
+    if (!handled) resolve(null);
+  });
 // Test hook: drive a synthetic webNavigation commit through the production
 // classifier and job (puppeteer cannot type into the real omnibox).
 globalThis.__tpSimulateNavCommit = (details) => {
@@ -2032,8 +2156,33 @@ async function handleUi(request) {
     }
     case "ui:setAutoLock": {
       // The popup's toggle on a pinned tab drives the GLOBAL auto-protection.
-      await chrome.storage.sync.set({ settings: { ...settings, autoLockPinned: !!request.on } });
+      await writeSettings({ autoLockPinned: !!request.on });
       return { ok: true };
+    }
+    case "ui:exportData": {
+      // Everything durable and portable in one clean file: settings plus the
+      // named sets. Autosaves and the canonical pinned layout stay device-
+      // local by design - restoring another machine's canon is exactly the
+      // mass-duplication class v3.8.0 killed.
+      const all = await chrome.storage.sync.get(null);
+      return tpPlatform.buildExport(all, chrome.runtime.getManifest().version);
+    }
+    case "ui:importData": {
+      const v = tpPlatform.validateImport(request.payload);
+      if (!v.ok) return { ok: false, error: v.error };
+      await writeSettings(v.settings);
+      i18nReady = null; // language may have changed
+      let setsWritten = 0;
+      for (const [name, value] of Object.entries(v.sets)) {
+        // Additive by name: replace the same-named, add the new, never touch
+        // the unmentioned. A single oversized set fails its own write only.
+        const ok = await chrome.storage.sync
+          .set({ [`${SNAP_PREFIX}${name}`]: value })
+          .then(() => true)
+          .catch(() => false);
+        if (ok) setsWritten++;
+      }
+      return { ok: true, sets: setsWritten };
     }
     case "ui:diagnostics": {
       // One-click state dump for the options page: everything needed to

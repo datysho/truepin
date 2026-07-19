@@ -228,5 +228,20 @@
   },
   "lockFrontAlways": {
     "message": "Всегда держать в начале"
+  },
+  "dataExport": {
+    "message": "Экспорт настроек и наборов"
+  },
+  "dataImport": {
+    "message": "Импорт из файла"
+  },
+  "dataExported": {
+    "message": "Экспортировано."
+  },
+  "dataImported": {
+    "message": "Импортировано."
+  },
+  "dataFailed": {
+    "message": "Это не файл экспорта TruePin."
   }
 }
