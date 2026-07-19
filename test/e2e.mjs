@@ -1469,7 +1469,18 @@ async function main() {
       try {
         const cdp = await page.createCDPSession();
         await cdp.send("Page.navigate", { url: dest, transitionType: "typed" });
-        forked = await waitFor("fork appeared (cdp)", async () => findTab("/navdest"), 4000, 200);
+        // The fork is a DIFFERENT tab on the destination: on a slow machine
+        // the poll can catch the SOURCE still sitting on /navdest before its
+        // goBack lands - matching it would assert the wrong tab (CI, 2-core).
+        forked = await waitFor(
+          "fork appeared (cdp)",
+          async () => {
+            const t = await findTab("/navdest");
+            return t && t.id !== tab.id ? t : null;
+          },
+          4000,
+          200,
+        );
       } catch {
         forked = null;
       }
@@ -1486,7 +1497,15 @@ async function main() {
         documentLifecycle: "active",
       });
       assert(kind === "address", `hook classified as address (got ${kind})`);
-      forked = await waitFor("fork appeared (hook)", async () => findTab("/navdest"), 5000, 200);
+      forked = await waitFor(
+        "fork appeared (hook)",
+        async () => {
+          const t = await findTab("/navdest");
+          return t && t.id !== tab.id ? t : null;
+        },
+        5000,
+        200,
+      );
     }
 
     step(`forked via ${drove}: destination in a NEW regular tab, source restored`);
