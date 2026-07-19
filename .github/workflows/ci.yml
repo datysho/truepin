@@ -1,0 +1,80 @@
+# The third verification layer (dev-process): someone else's machine runs the
+# same contracts. Two full passes per push (a flake is a bug, never a
+# re-roll) plus the four standing regression repros - the chronic bug classes
+# stay provably dead on every change.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: test/package-lock.json
+      - name: Cache Chrome for Testing
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('test/package-lock.json') }}
+      - run: npm ci
+      - name: e2e, run 1 of 2
+        run: npm test
+      - name: e2e, run 2 of 2 (flake gate)
+        run: npm test
+
+  repros:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: test/package-lock.json
+      - name: Cache Chrome for Testing
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('test/package-lock.json') }}
+      - run: npm ci
+      - name: repro - mass multiplication stays dead
+        run: npm run test:multiply
+      - name: repro - canon convergence stays dead
+        run: npm run test:canon
+      - name: repro - restore resurrection stays dead
+        run: npm run test:resurrect
+      - name: repro - crystallization stays dead
+        run: npm run test:crystallize
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guarded store package builds clean
+        run: ./package.sh
+      - name: The zip matches the manifest version
+        run: |
+          V=$(python3 -c "import json;print(json.load(open('extension/manifest.json'))['version'])")
+          test -f "dist/truepin-$V.zip"
