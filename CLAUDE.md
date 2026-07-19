@@ -1,0 +1,43 @@
+# CLAUDE.md
+
+TruePin - Chrome MV3 extension that makes pinned tabs trustworthy: pins survive restarts and profile drift, resurrected duplicates heal themselves, a protected tab keeps its page (typed addresses and cross-domain links open beside it). Store package is built from `extension/`.
+
+## Commands
+
+- Test: `cd test && npm test` - run TWICE before any merge or release (flake control); 42 e2e scenarios against real Chrome for Testing.
+- Standing red/green repros (chronic bug classes, keep them runnable): `npm run test:canon`, `npm run test:multiply`, `npm run test:resurrect`, `npm run test:crystallize` - each proven red on the version that had the bug.
+- Assets: `node test/shot.mjs`, `node test/shot-redesign.mjs`, `node test/shot-social.mjs` - regenerate from live CSS; exact legal CWS sizes, checked by machine.
+- Package: `./package.sh` - guarded build: strips the dev key, single zip in `dist/`, asserts packaged manifest version matches source. Rebuild after ANY version bump.
+
+## Process
+
+Full pipeline (change classes, gates, release checklist): `~/Clemond/system/dev-process.md`.
+Before dev work: read the Дистиллят of `~/Clemond/system/lessons/lessons-dev.md`; grep `~/Clemond/system/lessons/` for the symptom before fixing any bug.
+Feature specs go to `docs/specs/` from now on (v3.x predates the spec-first practice); the spec is approved before build and is the single source across the boundary - divergence goes back into the spec.
+Release: fill the "Submission checklist" in `STORE_LISTING.md`; dogfood and CWS submit are Michael's steps.
+
+## QA invariants (non-negotiable, survive without the vault)
+
+1. Every acceptance behavior has a named automated test; the spec's behavior-test table is the coverage report.
+2. Every bugfix ships with a regression test proven to fail on the old code (red/green).
+3. Platform limits (store field lengths, asset sizes) live in tests, not memory.
+4. Suite runs twice green before merge/release; a flake is a bug, not a re-roll.
+5. Test fixtures reach real-user magnitudes.
+6. Chronic bug classes get standing repro scripts kept runnable (the four `test:*` repros above).
+
+Plus: no fix without investigation (root cause + tested hypothesis); after 3 failed fixes in a row - stop, the class needs an invariant, not a fourth point-fix.
+
+## Process overrides
+
+None.
+
+## Gotchas
+
+- A recurring symptom is a STOP signal - fix the class with a by-construction invariant plus a circuit breaker, not another point-fix: the "restore 5 pins, get 31 tabs" saga survived four point-fixes until the invariant killed it (lesson recurring-class-needs-invariant).
+- URL identity does not survive drift (redirects, params, restarts) - persistent canon records + one convergence engine + circuit breaker; no second mechanism beside it.
+- Ownership/session state must survive worker restart for ALL record types, or features degrade invisibly (lesson ownership-must-survive-restart).
+- Reconciliation must not react while the world is half-restored - settle-then-adopt behind the readiness gate (lesson mirror-cold-start-cascade).
+- Defensive automation must be visible and one-click revocable; a user testing a feature by repetition must not accrue strikes (lesson invisible-safety-reads-as-broken).
+- Unpacked extension id differs per machine - the pinned `key` keeps ids stable across devices and `package.sh` strips it for CWS (lesson extension-id-sync).
+- When a feature is cut, sweep STORE_LISTING/PRIVACY/locale texts for drift (lesson store-texts-drift).
+- Full lesson corpus and registry: `~/Clemond/system/lessons/` (this repo's rows mostly in lessons-dev.md).
