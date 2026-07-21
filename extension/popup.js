@@ -181,24 +181,6 @@ function focusTab(id, win) {
   window.close();
 }
 
-// Activate a neighbouring tab in the same window so the one we are about to
-// close is no longer active - closing an inactive tab does not dismiss the
-// popup. The nearest tab (right, then left) inherits focus, mirroring what
-// Chrome would pick. Returns after the switch; the last tab in a window has no
-// sibling, so the window (and popup) close anyway - unavoidable.
-async function focusSiblingOf(tab) {
-  const tabs = await chrome.tabs.query({ windowId: tab.windowId });
-  const closing = tabs.find((x) => x.id === tab.id);
-  const others = tabs.filter((x) => x.id !== tab.id);
-  if (!closing || !others.length) return;
-  const pick =
-    others.find((x) => x.index === closing.index + 1) ||
-    [...others].reverse().find((x) => x.index < closing.index) ||
-    others[0];
-  await chrome.tabs.update(pick.id, { active: true });
-  activeTabId = pick.id; // the popup now reflects the tab we landed on
-}
-
 function render() {
   // Two independent controls, both always shown:
   //  - "Protect pinned tabs" drives the GLOBAL auto-protection setting.
@@ -274,10 +256,17 @@ function render() {
         return;
       }
       clearTimeout(close._t);
-      // Closing the tab we are currently viewing would dismiss the popup with it
-      // (closing any OTHER tab leaves the popup open). Move focus to a sibling
-      // first so the popup survives - the pin then closes as a background tab.
-      if (tab.id === activeTabId) await focusSiblingOf(tab);
+      if (tab.id === activeTabId) {
+        // Closing the tab we are viewing forces Chrome to activate another tab,
+        // and that switch dismisses the action popup no matter what - even a
+        // pre-switch to a sibling does (and awaiting it drops the close as the
+        // popup tears down, leaving the pin open). So dispatch synchronously,
+        // fire-and-forget: the message reaches the worker before teardown, the
+        // pin closes, the popup goes with its tab. Closing any OTHER pin keeps
+        // the popup open (the branch below).
+        send({ type: "ui:closePinned", tabId: tab.id });
+        return;
+      }
       await send({ type: "ui:closePinned", tabId: tab.id });
       refresh();
     });
