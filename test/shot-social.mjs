@@ -139,7 +139,6 @@ async function shootPopup(theme) {
       .waitForFunction(
         () =>
           document.querySelectorAll("#pinnedList li:not(.muted)").length >= 3 &&
-          document.getElementById("lockLabel").textContent.length > 0 &&
           document.querySelectorAll("#snapList .snap").length >= 2,
         { timeout: 5000 },
       )

@@ -77,45 +77,36 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.15.1 (update submission)
+## What's new in 3.15.2 (update submission)
 
-User-visible, for the version notes if the form asks:
-- New "Pin this tab" switch in the popup - pin or unpin the tab you are on
-  without leaving it. The popup shows two switches for the current tab: "Pin
-  this tab" and "Lock this tab" ("Lock this tab" is greyed for a pinned tab, and
-  greyed shows its real protected state - on when the pin is protected). The
-  global "Protect pinned tabs" toggle stays in Settings.
-- The popup has a slim custom scrollbar that stays out of the way and fades in
-  only while you point at the list; it also reserves its lane, so the content no
-  longer shifts sideways the moment the bar appears.
-- The popup's switches now open already in their correct position instead of
-  animating into it.
+Form-ready release notes (this update bundles everything since the last
+published build). Paste into the "What's new" field if the form asks:
 
-## What's new in 3.12.1
+New:
+- Manage the current tab from the popup: "Pin this tab" and "Lock this tab"
+  switches, without leaving the tab.
+- Export / import your settings and named sets as one clean JSON file; sets
+  merge by name and never delete the ones the file does not mention.
+- A locked tab you place into a tab group yourself now stays there.
+- Works in concert with TrueTabs when both are installed (each still works
+  alone, unchanged).
 
-User-visible, for the version notes if the form asks:
-- Fixed: the toolbar icon could stay colored after disabling and re-enabling
-  the extension while the settings still read "monochrome"; the icon now
-  reapplies your chosen style on every start.
-- Fixed: a protected tab in a live Google Meet call no longer forks into
-  duplicate tabs when the call reconnects - in-page redirects stay in place.
+Fixed:
+- The toolbar icon could stay colored after disabling and re-enabling the
+  extension while set to monochrome; it now reapplies your chosen style on
+  every start.
+- A protected tab in a live Google Meet call no longer forks into duplicate
+  tabs when the call reconnects.
 
-## What's new in 3.12.0
+Polish:
+- Web Store updates now apply silently at a quiet moment; your settings survive.
+- Smoother popup: a slim scrollbar that floats over the list instead of taking
+  a lane, so the content never shifts or sits off-center, and switches that open
+  already in their correct position.
 
-User-visible, for the version notes if the form asks:
-- Export/import: Options can write settings and named sets to a JSON file
-  and read them back; sets merge by name, never deleting ones the file does
-  not mention. No secrets exist in TruePin, so the file is clean.
-- A locked tab you place into a tab group yourself now stays there - the
-  "Always keep at the front" pull resumes when it leaves the group.
-- Plays in concert with TrueTabs when both are installed: TruePin announces
-  which tabs are locked to the front, TrueTabs reserves that stretch of the
-  strip (pinned, then locked, then groups). Either works alone, unchanged.
-- Updates from the Web Store now apply silently at a quiet moment; settings
-  survive every version.
-- Post-publish TODO carried by the release checklist: when TrueTabs gets its
-  own Web Store id, add it to FAMILY_IDS in background.js (the dev-key id
-  already works for unpacked installs).
+Post-publish TODO (carried by the release checklist): when TrueTabs gets its own
+Web Store id, add it to FAMILY_IDS in background.js (the dev-key id already works
+for unpacked installs).
 
 ## After approval
 

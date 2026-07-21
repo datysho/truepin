@@ -178,6 +178,64 @@ function focusTab(id, win) {
   window.close();
 }
 
+// Overlay scrollbar. The native bar is hidden in CSS (it would otherwise steal a
+// layout lane under macOS "always show scrollbars", or shift the content the
+// moment it appears). We draw a thin thumb ON TOP of the content: the list stays
+// full-width and symmetric, and nothing moves when scrolling begins. Wheel and
+// trackpad scroll natively; the thumb is a live indicator and can be dragged.
+function initOverlayScroll() {
+  const scroll = $("scroll");
+  const host = scroll.parentElement;
+  const thumb = $("tpThumb");
+  const INSET = 4; // .tp-scrollbar top+bottom insets (2px each)
+  let hideTimer = null;
+
+  function layout() {
+    const { scrollTop, scrollHeight, clientHeight } = scroll;
+    const scrollable = scrollHeight - clientHeight > 1;
+    host.classList.toggle("scrollable", scrollable);
+    if (!scrollable) return;
+    const trackH = clientHeight - INSET;
+    const h = Math.max(28, Math.round((clientHeight / scrollHeight) * trackH));
+    const top = Math.round((scrollTop / (scrollHeight - clientHeight)) * (trackH - h));
+    thumb.style.height = h + "px";
+    thumb.style.transform = `translateY(${top}px)`;
+  }
+  function flash() {
+    host.classList.add("scrolling");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => host.classList.remove("scrolling"), 1000);
+  }
+
+  scroll.addEventListener("scroll", () => { layout(); flash(); }, { passive: true });
+  new ResizeObserver(layout).observe(scroll);
+  // The lists are rebuilt on every render; recompute the thumb when they change.
+  new MutationObserver(layout).observe(scroll, { childList: true, subtree: true });
+
+  thumb.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    thumb.classList.add("drag");
+    thumb.setPointerCapture(event.pointerId);
+    const startY = event.clientY;
+    const startTop = scroll.scrollTop;
+    const trackH = scroll.clientHeight - INSET;
+    const range = scroll.scrollHeight - scroll.clientHeight;
+    const span = trackH - thumb.offsetHeight;
+    const onMove = (e) => {
+      if (span > 0) scroll.scrollTop = startTop + ((e.clientY - startY) / span) * range;
+    };
+    const onUp = () => {
+      thumb.classList.remove("drag");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+
+  layout();
+}
+
 function render() {
   // Two controls for the active tab (the global "Protect pinned tabs" setting
   // lives in Options, not here):
@@ -393,6 +451,7 @@ async function init() {
   });
 
   await refresh();
+  initOverlayScroll();
   // First render has set the real toggle states; re-enable switch animations for
   // subsequent user interaction. Two frames so the applied state is painted
   // before transitions turn back on (otherwise the enabling frame animates).
