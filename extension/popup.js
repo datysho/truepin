@@ -116,9 +116,6 @@ function snapRow({ label, meta, metaTitle, onRestore, onDelete, tooltip }) {
 const OPEN_LOCK_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
 
-const CLOSE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-
 // The LOCKED shelf: manually-locked non-pinned tabs across all windows. Rendered
 // only when there is at least one, so at rest the popup is byte-for-byte as before.
 function renderLocked() {
@@ -241,44 +238,6 @@ function render() {
       mark.title = t("splitTitle");
       li.append(mark);
     }
-    // Close button: a pinned protected tab is normally resurrected on close, so
-    // this routes through ui:closePinned, which removes the pin for good. Two
-    // clicks (SVG -> "sure?") guard the irreversible removal, same as a snapshot
-    // delete.
-    const close = document.createElement("button");
-    close.className = "close";
-    close.title = t("closePinnedTitle");
-    close.innerHTML = CLOSE_SVG;
-    close.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      if (!close.dataset.confirm) {
-        close.dataset.confirm = "1";
-        close.classList.add("confirm");
-        close.textContent = t("confirmDelete");
-        clearTimeout(close._t);
-        close._t = setTimeout(() => {
-          delete close.dataset.confirm;
-          close.classList.remove("confirm");
-          close.innerHTML = CLOSE_SVG;
-        }, 2500);
-        return;
-      }
-      clearTimeout(close._t);
-      if (tab.id === activeTabId) {
-        // Closing the tab we are viewing forces Chrome to activate another tab,
-        // and that switch dismisses the action popup no matter what - even a
-        // pre-switch to a sibling does (and awaiting it drops the close as the
-        // popup tears down, leaving the pin open). So dispatch synchronously,
-        // fire-and-forget: the message reaches the worker before teardown and
-        // the pin closes. `reopen` asks the worker to re-open the popup on the
-        // tab we land on, so the popup does not just vanish from under us.
-        send({ type: "ui:closePinned", tabId: tab.id, reopen: true });
-        return;
-      }
-      await send({ type: "ui:closePinned", tabId: tab.id });
-      refresh();
-    });
-    li.append(close);
     list.append(li);
   }
   $("saveBtn").disabled = !state.pinned.length;
@@ -437,6 +396,12 @@ async function init() {
   });
 
   await refresh();
+  // First render has set the real toggle states; re-enable switch animations for
+  // subsequent user interaction. Two frames so the applied state is painted
+  // before transitions turn back on (otherwise the enabling frame animates).
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => document.documentElement.classList.remove("tp-preload")),
+  );
 }
 
 init();

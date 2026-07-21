@@ -44,9 +44,6 @@
   "unlockTitle": {
     "message": "解锁此标签页"
   },
-  "closePinnedTitle": {
-    "message": "关闭标签页"
-  },
   "gotoTitle": {
     "message": "跳转到标签页"
   },

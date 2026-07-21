@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html class="tp-preload">
   <head>
     <meta charset="utf-8" />
     <style>
@@ -117,6 +117,11 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+        /* Reserve the scrollbar's width at all times, so the content does NOT
+           shift left the moment the list grows past the fold and the bar
+           appears. The bar itself still only shows on overflow; this only holds
+           its lane open. */
+        scrollbar-gutter: stable;
         overscroll-behavior: contain;
         scrollbar-width: thin;
         scrollbar-color: transparent transparent;
@@ -230,6 +235,14 @@
       input.switch:disabled {
         opacity: 0.38;
         cursor: default;
+      }
+      /* On open the switches paint in their default (off) state, then the first
+         render sets the real values. Suppress the slide until that first paint
+         so the toggles appear already in the right position instead of animating
+         into it. popup.js drops .tp-preload once state is applied. */
+      .tp-preload input.switch,
+      .tp-preload input.switch::before {
+        transition: none !important;
       }
       /* No hover state-layer on a disabled switch - it must read as inert. */
       input.switch:disabled:hover::before {
@@ -401,47 +414,6 @@
         width: 15px;
         height: 15px;
         display: block;
-      }
-      /* Close button on a pinned row: revealed on row hover/focus, so the strip
-         stays calm at rest. Matches the locked shelf's round icon-button. */
-      #pinnedList li .close {
-        flex: none;
-        border: none;
-        background: transparent;
-        color: var(--muted);
-        width: 26px;
-        height: 26px;
-        margin: -4px -4px -4px 0;
-        padding: 0;
-        border-radius: 13px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
-      }
-      #pinnedList li:hover .close,
-      #pinnedList li .close:focus-visible {
-        opacity: 1;
-      }
-      #pinnedList li .close:hover {
-        background: var(--active);
-        color: var(--err);
-      }
-      #pinnedList li .close svg {
-        width: 15px;
-        height: 15px;
-        display: block;
-      }
-      /* Confirm state ("sure?"): stays visible off-hover, grows to fit the word. */
-      #pinnedList li .close.confirm {
-        opacity: 1;
-        width: auto;
-        padding: 0 8px;
-        color: var(--err);
-        font-size: 12px;
-        font-weight: 500;
       }
       .save-row {
         display: flex;

@@ -77,28 +77,18 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.14.0 (update submission)
+## What's new in 3.15.0 (update submission)
 
 User-visible, for the version notes if the form asks:
 - New "Pin this tab" switch in the popup - pin or unpin the tab you are on
-  without leaving it. The popup now shows three switches: "Protect pinned tabs"
-  (global), "Pin this tab", and "Lock this tab".
-- The popup's scrollbar is now a slim custom bar that stays out of the way and
-  fades in only while you are pointing at the list, instead of the heavy
-  always-on native bar.
-- Closing the pinned tab you are currently on re-opens the popup on the tab you
-  land on (where Chrome supports it), so it no longer just disappears.
-
-## What's new in 3.13.2
-
-User-visible, for the version notes if the form asks:
-- Each pinned tab in the popup now has a close button on the right. It asks to
-  confirm ("sure?") before removing, then removes that pin for good - it is not
-  resurrected and does not come back in other windows.
-- The popup now shows both switches at all times: "Protect pinned tabs" (the
-  global setting) and "Lock this tab". "Lock this tab" is greyed out when there
-  is no active tab, or when the active tab is pinned (those are governed by the
-  setting above).
+  without leaving it. The popup now shows three switches at all times: "Protect
+  pinned tabs" (global), "Pin this tab", and "Lock this tab" ("Lock this tab"
+  greys out when the active tab is pinned or when there is no active tab).
+- The popup has a slim custom scrollbar that stays out of the way and fades in
+  only while you point at the list; it also reserves its lane, so the content no
+  longer shifts sideways the moment the bar appears.
+- The popup's switches now open already in their correct position instead of
+  animating into it.
 
 ## What's new in 3.12.1
 

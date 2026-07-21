@@ -791,20 +791,6 @@ async function main() {
     await uiCall({ type: "ui:deleteSnapshot", name: "a-very-long-snapshot-name-that-keeps-go" });
     await uiCall({ type: "ui:deleteSnapshot", name: "second" });
 
-    step("pinned close button arms 'sure?' on the first click, closes nothing");
-    const pinBefore = await pinnedOf(snapWindowId);
-    const armed = await page.evaluate(() => {
-      const btn = document.querySelector("#pinnedList li .close");
-      if (!btn) return { ok: false };
-      btn.click(); // first click: arm the confirm, do not remove
-      return { ok: true, confirm: btn.classList.contains("confirm"), text: btn.textContent };
-    });
-    assert(armed.ok, "each pinned row carries a close button");
-    assert(armed.confirm && /sure|точно/i.test(armed.text), "first click shows 'sure?' instead of closing");
-    await sleep(500);
-    const pinAfter = await pinnedOf(snapWindowId);
-    assert(pinAfter.length === pinBefore.length, "the arming click removes no pin");
-
     step("pin / lock switches render for the active (unpinned popup) tab");
     const switches = await page.evaluate(() => ({
       hasPin: !!document.getElementById("pinToggle"),
@@ -2133,34 +2119,6 @@ async function main() {
     step("cleanup");
     await sleep(1600); // let unpin-confirm settle before removing
     await removeTab(tab.id);
-    await sleep(400);
-  });
-
-  await test("popup close button: ui:closePinned removes a protected pin for good (no resurrection)", async () => {
-    const { tab } = await openPage("/closepin");
-    await setPinned(tab.id, true);
-    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
-    // Let the pin register into a mirror group so the dissolve path runs.
-    await sleep(800);
-    // A plain user close resurrects a protected pin; the close button routes
-    // through ui:closePinned, which must remove it and keep it gone.
-    await swEval((r) => globalThis.__tpUiCall(r), { type: "ui:closePinned", tabId: tab.id });
-    await sleep(1600);
-    assert(!(await findTab("/closepin")), "pin closed and not resurrected");
-    // The canon followed the mirror, so a new window does not re-mirror it back.
-    const probe = await swEval(
-      () =>
-        new Promise((resolve) =>
-          chrome.windows.create({ url: "about:blank" }, (w) => {
-            void chrome.runtime.lastError;
-            resolve(w ? w.id : null);
-          }),
-        ),
-    );
-    await sleep(1200);
-    assert(!(await findTab("/closepin")), "closed pin does not resurrect in a fresh window");
-    step("cleanup");
-    if (probe) await swEval((id) => chrome.windows.remove(id), probe);
     await sleep(400);
   });
 

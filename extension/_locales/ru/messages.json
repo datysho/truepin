@@ -44,9 +44,6 @@
   "unlockTitle": {
     "message": "Разблокировать вкладку"
   },
-  "closePinnedTitle": {
-    "message": "Закрыть вкладку"
-  },
   "gotoTitle": {
     "message": "Перейти к вкладке"
   },

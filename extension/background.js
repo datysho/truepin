@@ -2197,43 +2197,6 @@ async function handleUi(request) {
       if (!done) return { error: "hintPlain" };
       return { ok: true };
     }
-    case "ui:closePinned": {
-      // The close button on a pinned row. A pinned protected tab would normally
-      // be resurrected on close - so this is a deliberate removal, not a user
-      // close: dissolve the pin's mirror group (closing every copy across
-      // windows, each marked self-closed so the protection stays quiet) and let
-      // the canon follow, so the pin does not come back on the next window or
-      // restart. Not mirrored (feature off / not yet registered): self-close the
-      // one tab.
-      const tab = await quiet(chrome.tabs.get, request.tabId);
-      if (!tab) return { error: "hintPlain" };
-      const mirror = await getMirror();
-      const gid = groupOfTab(mirror, request.tabId);
-      if (gid) {
-        await dissolveGroup(mirror, gid); // no keeper: closes every member
-        await putMirror(mirror); // canon tracks the mirror - the pin is gone for good
-      } else {
-        await markSelfClosed([request.tabId]);
-        await quiet(chrome.tabs.remove, request.tabId);
-      }
-      scheduleAutoSnapshot();
-      // The popup closed the very tab it sat on, so Chrome activates a neighbour
-      // and the action popup is dismissed with the switch (unavoidable). Best
-      // effort: re-open it on the tab we landed on, so it does not just vanish.
-      // openPopup lands in Chrome 127+, needs a focused normal window and can
-      // reject - a missing API or a rejection just means no reopen, never noise.
-      if (request.reopen && chrome.action.openPopup) {
-        setTimeout(() => {
-          try {
-            const p = chrome.action.openPopup();
-            if (p && typeof p.catch === "function") p.catch(() => {});
-          } catch {
-            /* older Chrome or no focused window: degrade to no reopen */
-          }
-        }, 150);
-      }
-      return { ok: true };
-    }
     case "ui:exportData": {
       // Everything durable and portable in one clean file: settings plus the
       // named sets. Autosaves and the canonical pinned layout stay device-
