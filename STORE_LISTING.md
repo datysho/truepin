@@ -62,11 +62,15 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 
 ## Assets to supply in the listing
 
-- **Screenshots:** at least 1 (up to 5), 1280x800 or 640x400. Use the redesign
-  popup and options shots.
-- **Store icon:** 128x128 (already in the package as icons/locked-128.png; the
+All rendered from the live extension by machine (regenerate with the `test/shot-*`
+scripts; see CLAUDE.md "Commands").
+
+- **Screenshots:** at least 1 (up to 5), 1280x800 - `store/screenshots/store-popup-{light,dark}.png`
+  and `store-options-{light,dark}.png`.
+- **Store icon:** 128x128 (already in the package as `icons/locked-128.png`; the
   listing also asks for a 128 upload).
-- **Small promo tile (optional):** 440x280.
+- **Small promo tile (optional):** 440x280 - `store/promo-small.jpg` (JPEG, no alpha).
+- **Marquee promo tile (optional):** 1400x560 - `store/promo-marquee.jpg` (JPEG, no alpha).
 
 ## Submission checklist
 
