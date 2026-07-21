@@ -77,7 +77,18 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.12.1 (update submission)
+## What's new in 3.13.0 (update submission)
+
+User-visible, for the version notes if the form asks:
+- Each pinned tab in the popup now has a close button on the right - one click
+  removes that pin for good (it is not resurrected, and it does not come back
+  in other windows).
+- The popup now shows both switches at all times: "Protect pinned tabs" (the
+  global setting) and "Lock this tab". "Lock this tab" is greyed out when there
+  is no active tab, or when the active tab is pinned (those are governed by the
+  setting above).
+
+## What's new in 3.12.1
 
 User-visible, for the version notes if the form asks:
 - Fixed: the toolbar icon could stay colored after disabling and re-enabling

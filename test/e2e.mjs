@@ -2086,6 +2086,34 @@ async function main() {
     );
   });
 
+  await test("popup close button: ui:closePinned removes a protected pin for good (no resurrection)", async () => {
+    const { tab } = await openPage("/closepin");
+    await setPinned(tab.id, true);
+    await waitFor("protected", async () => (await tabState(tab.id))?.protected === true);
+    // Let the pin register into a mirror group so the dissolve path runs.
+    await sleep(800);
+    // A plain user close resurrects a protected pin; the close button routes
+    // through ui:closePinned, which must remove it and keep it gone.
+    await swEval((r) => globalThis.__tpUiCall(r), { type: "ui:closePinned", tabId: tab.id });
+    await sleep(1600);
+    assert(!(await findTab("/closepin")), "pin closed and not resurrected");
+    // The canon followed the mirror, so a new window does not re-mirror it back.
+    const probe = await swEval(
+      () =>
+        new Promise((resolve) =>
+          chrome.windows.create({ url: "about:blank" }, (w) => {
+            void chrome.runtime.lastError;
+            resolve(w ? w.id : null);
+          }),
+        ),
+    );
+    await sleep(1200);
+    assert(!(await findTab("/closepin")), "closed pin does not resurrect in a fresh window");
+    step("cleanup");
+    if (probe) await swEval((id) => chrome.windows.remove(id), probe);
+    await sleep(400);
+  });
+
   await test("re-enable: worker wake re-settles the mirror so per-tab icons reapply", async () => {
     step("mono style, pin a tab, settle once");
     await swEval(() => chrome.storage.sync.set({ settings: { iconStyle: "mono" } }));

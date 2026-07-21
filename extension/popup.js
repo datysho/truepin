@@ -116,6 +116,9 @@ function snapRow({ label, meta, metaTitle, onRestore, onDelete, tooltip }) {
 const OPEN_LOCK_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
 
+const CLOSE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
 // The LOCKED shelf: manually-locked non-pinned tabs across all windows. Rendered
 // only when there is at least one, so at rest the popup is byte-for-byte as before.
 function renderLocked() {
@@ -179,14 +182,18 @@ function focusTab(id, win) {
 }
 
 function render() {
-  // The switch: on a pinned tab it drives the GLOBAL auto-protection of
-  // pinned tabs; on a regular tab it is that tab's own manual lock.
+  // Two independent controls, both always shown:
+  //  - "Protect pinned tabs" drives the GLOBAL auto-protection setting.
+  //  - "Lock this tab" is the active tab's own manual lock; it is inert (greyed)
+  //    when there is no active tab, or the active tab is pinned - a pinned tab is
+  //    governed by the setting above, not by a per-tab lock.
   const active = state.active;
-  const pinnedMode = !!(active && active.pinned);
-  $("lockLabel").textContent = t(pinnedMode ? "popupAutoLockLabel" : "popupLockLabel");
-  $("lockToggle").checked = pinnedMode
-    ? !!state.settings.autoLockPinned
-    : !!(active && active.protected);
+  $("protectToggle").checked = !!state.settings.autoLockPinned;
+  const lockDisabled = !active || !!active.pinned;
+  const lockToggle = $("lockToggle");
+  lockToggle.disabled = lockDisabled;
+  lockToggle.checked = !lockDisabled && !!active.protected;
+  $("lockRow").classList.toggle("disabled", lockDisabled);
 
   // Current pinned tabs.
   const list = $("pinnedList");
@@ -226,6 +233,18 @@ function render() {
       mark.title = t("splitTitle");
       li.append(mark);
     }
+    // Close button: a pinned protected tab is normally resurrected on close, so
+    // this routes through ui:closePinned, which removes the pin for good.
+    const close = document.createElement("button");
+    close.className = "close";
+    close.title = t("closePinnedTitle");
+    close.innerHTML = CLOSE_SVG;
+    close.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await send({ type: "ui:closePinned", tabId: tab.id });
+      refresh();
+    });
+    li.append(close);
     list.append(li);
   }
   $("saveBtn").disabled = !state.pinned.length;
@@ -334,11 +353,15 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeTabId = tab ? tab.id : undefined;
 
+  $("protectToggle").addEventListener("change", async () => {
+    const result = await send({ type: "ui:setAutoLock", on: $("protectToggle").checked });
+    if (result && result.error) setStatus(t(result.error), true);
+    refresh();
+  });
   $("lockToggle").addEventListener("change", async () => {
-    if (!state || !state.active) return;
-    const result = state.active.pinned
-      ? await send({ type: "ui:setAutoLock", on: $("lockToggle").checked })
-      : await send({ type: "ui:toggle", tabId: activeTabId });
+    // render() disables this for a pinned or absent active tab; guard anyway.
+    if (!state || !state.active || state.active.pinned) return;
+    const result = await send({ type: "ui:toggle", tabId: activeTabId });
     if (result && result.error) setStatus(t(result.error), true);
     refresh();
   });

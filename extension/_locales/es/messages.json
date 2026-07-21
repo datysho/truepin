@@ -41,6 +41,9 @@
   "unlockTitle": {
     "message": "Desbloquear esta pestaña"
   },
+  "closePinnedTitle": {
+    "message": "Cerrar pestaña"
+  },
   "gotoTitle": {
     "message": "Ir a la pestaña"
   },

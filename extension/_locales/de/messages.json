@@ -41,6 +41,9 @@
   "unlockTitle": {
     "message": "Tab entsperren"
   },
+  "closePinnedTitle": {
+    "message": "Tab schließen"
+  },
   "gotoTitle": {
     "message": "Zum Tab wechseln"
   },

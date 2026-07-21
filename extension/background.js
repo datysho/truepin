@@ -2185,8 +2185,30 @@ async function handleUi(request) {
       return { ok: true };
     }
     case "ui:setAutoLock": {
-      // The popup's toggle on a pinned tab drives the GLOBAL auto-protection.
+      // The popup's "Protect pinned tabs" toggle drives the GLOBAL auto-protection.
       await writeSettings({ autoLockPinned: !!request.on });
+      return { ok: true };
+    }
+    case "ui:closePinned": {
+      // The close button on a pinned row. A pinned protected tab would normally
+      // be resurrected on close - so this is a deliberate removal, not a user
+      // close: dissolve the pin's mirror group (closing every copy across
+      // windows, each marked self-closed so the protection stays quiet) and let
+      // the canon follow, so the pin does not come back on the next window or
+      // restart. Not mirrored (feature off / not yet registered): self-close the
+      // one tab.
+      const tab = await quiet(chrome.tabs.get, request.tabId);
+      if (!tab) return { error: "hintPlain" };
+      const mirror = await getMirror();
+      const gid = groupOfTab(mirror, request.tabId);
+      if (gid) {
+        await dissolveGroup(mirror, gid); // no keeper: closes every member
+        await putMirror(mirror); // canon tracks the mirror - the pin is gone for good
+      } else {
+        await markSelfClosed([request.tabId]);
+        await quiet(chrome.tabs.remove, request.tabId);
+      }
+      scheduleAutoSnapshot();
       return { ok: true };
     }
     case "ui:exportData": {

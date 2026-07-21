@@ -41,6 +41,9 @@
   "unlockTitle": {
     "message": "Destravar esta aba"
   },
+  "closePinnedTitle": {
+    "message": "Fechar aba"
+  },
   "gotoTitle": {
     "message": "Ir para a aba"
   },

@@ -41,6 +41,9 @@
   "unlockTitle": {
     "message": "Déverrouiller cet onglet"
   },
+  "closePinnedTitle": {
+    "message": "Fermer l'onglet"
+  },
   "gotoTitle": {
     "message": "Aller à l'onglet"
   },
