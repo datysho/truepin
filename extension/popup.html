@@ -402,6 +402,15 @@
         height: 15px;
         display: block;
       }
+      /* Confirm state ("sure?"): stays visible off-hover, grows to fit the word. */
+      #pinnedList li .close.confirm {
+        opacity: 1;
+        width: auto;
+        padding: 0 8px;
+        color: var(--err);
+        font-size: 12px;
+        font-weight: 500;
+      }
       .save-row {
         display: flex;
         gap: 8px;

@@ -790,6 +790,21 @@ async function main() {
 
     await uiCall({ type: "ui:deleteSnapshot", name: "a-very-long-snapshot-name-that-keeps-go" });
     await uiCall({ type: "ui:deleteSnapshot", name: "second" });
+
+    step("pinned close button arms 'sure?' on the first click, closes nothing");
+    const pinBefore = await pinnedOf(snapWindowId);
+    const armed = await page.evaluate(() => {
+      const btn = document.querySelector("#pinnedList li .close");
+      if (!btn) return { ok: false };
+      btn.click(); // first click: arm the confirm, do not remove
+      return { ok: true, confirm: btn.classList.contains("confirm"), text: btn.textContent };
+    });
+    assert(armed.ok, "each pinned row carries a close button");
+    assert(armed.confirm && /sure|точно/i.test(armed.text), "first click shows 'sure?' instead of closing");
+    await sleep(500);
+    const pinAfter = await pinnedOf(snapWindowId);
+    assert(pinAfter.length === pinBefore.length, "the arming click removes no pin");
+
     step("close popup page");
     await page.close().catch(() => {});
   });

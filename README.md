@@ -30,7 +30,7 @@
 ## One rule
 
 > [!IMPORTANT]
-> **A protected tab does not close.** Any close - the close button, Cmd+W, a script, another extension - is undone instantly: the tab comes right back, pinned, with its history, with a short notification. No dialogs. To actually close a protected tab, unpin it first, then close it - or use the close button on its row in the popup, which removes the pin for good in one click.
+> **A protected tab does not close.** Any close - the close button, Cmd+W, a script, another extension - is undone instantly: the tab comes right back, pinned, with its history, with a short notification. No dialogs. To actually close a protected tab, unpin it first, then close it - or use the close button on its row in the popup (it asks to confirm), which removes the pin for good.
 
 Reloading and navigating are free - the tab is not going anywhere, after all. Unpinning is the deliberate act: it drops the protection, the tab becomes a regular one, and its copies in other windows close.
 
