@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin: без защиты"
   },
+  "popupPinLabel": {
+    "message": "Закрепить эту вкладку"
+  },
   "popupLockLabel": {
     "message": "Замок на этой вкладке"
   },

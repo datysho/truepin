@@ -2189,6 +2189,14 @@ async function handleUi(request) {
       await writeSettings({ autoLockPinned: !!request.on });
       return { ok: true };
     }
+    case "ui:setPinned": {
+      // The popup's "Pin this tab" switch. Pin or unpin the active tab; the tab
+      // listeners (onUpdated pinned:true/false) drive mirroring and protection
+      // from there, same as pinning from Chrome's own tab menu.
+      const done = await quiet(chrome.tabs.update, request.tabId, { pinned: !!request.on });
+      if (!done) return { error: "hintPlain" };
+      return { ok: true };
+    }
     case "ui:closePinned": {
       // The close button on a pinned row. A pinned protected tab would normally
       // be resurrected on close - so this is a deliberate removal, not a user
@@ -2209,6 +2217,21 @@ async function handleUi(request) {
         await quiet(chrome.tabs.remove, request.tabId);
       }
       scheduleAutoSnapshot();
+      // The popup closed the very tab it sat on, so Chrome activates a neighbour
+      // and the action popup is dismissed with the switch (unavoidable). Best
+      // effort: re-open it on the tab we landed on, so it does not just vanish.
+      // openPopup lands in Chrome 127+, needs a focused normal window and can
+      // reject - a missing API or a rejection just means no reopen, never noise.
+      if (request.reopen && chrome.action.openPopup) {
+        setTimeout(() => {
+          try {
+            const p = chrome.action.openPopup();
+            if (p && typeof p.catch === "function") p.catch(() => {});
+          } catch {
+            /* older Chrome or no focused window: degrade to no reopen */
+          }
+        }, 150);
+      }
       return { ok: true };
     }
     case "ui:exportData": {

@@ -182,13 +182,21 @@ function focusTab(id, win) {
 }
 
 function render() {
-  // Two independent controls, both always shown:
+  // Three controls, all always shown:
   //  - "Protect pinned tabs" drives the GLOBAL auto-protection setting.
-  //  - "Lock this tab" is the active tab's own manual lock; it is inert (greyed)
-  //    when there is no active tab, or the active tab is pinned - a pinned tab is
-  //    governed by the setting above, not by a per-tab lock.
+  //  - "Pin this tab" is the active tab's own pinned state (inert without one).
+  //  - "Lock this tab" is the active tab's own manual lock; inert (greyed) when
+  //    there is no active tab, or the active tab is pinned - a pinned tab is
+  //    governed by "Protect pinned tabs", not by a per-tab lock.
   const active = state.active;
   $("protectToggle").checked = !!state.settings.autoLockPinned;
+
+  const pinToggle = $("pinToggle");
+  const pinDisabled = !active;
+  pinToggle.disabled = pinDisabled;
+  pinToggle.checked = !pinDisabled && !!active.pinned;
+  $("pinRow").classList.toggle("disabled", pinDisabled);
+
   const lockDisabled = !active || !!active.pinned;
   const lockToggle = $("lockToggle");
   lockToggle.disabled = lockDisabled;
@@ -261,10 +269,10 @@ function render() {
         // and that switch dismisses the action popup no matter what - even a
         // pre-switch to a sibling does (and awaiting it drops the close as the
         // popup tears down, leaving the pin open). So dispatch synchronously,
-        // fire-and-forget: the message reaches the worker before teardown, the
-        // pin closes, the popup goes with its tab. Closing any OTHER pin keeps
-        // the popup open (the branch below).
-        send({ type: "ui:closePinned", tabId: tab.id });
+        // fire-and-forget: the message reaches the worker before teardown and
+        // the pin closes. `reopen` asks the worker to re-open the popup on the
+        // tab we land on, so the popup does not just vanish from under us.
+        send({ type: "ui:closePinned", tabId: tab.id, reopen: true });
         return;
       }
       await send({ type: "ui:closePinned", tabId: tab.id });
@@ -381,6 +389,13 @@ async function init() {
 
   $("protectToggle").addEventListener("change", async () => {
     const result = await send({ type: "ui:setAutoLock", on: $("protectToggle").checked });
+    if (result && result.error) setStatus(t(result.error), true);
+    refresh();
+  });
+  $("pinToggle").addEventListener("change", async () => {
+    // render() disables this without an active tab; guard anyway.
+    if (!state || !state.active) return;
+    const result = await send({ type: "ui:setPinned", tabId: activeTabId, on: $("pinToggle").checked });
     if (result && result.error) setStatus(t(result.error), true);
     refresh();
   });

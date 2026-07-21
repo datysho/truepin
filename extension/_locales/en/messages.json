@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin: not protected"
   },
+  "popupPinLabel": {
+    "message": "Pin this tab"
+  },
   "popupLockLabel": {
     "message": "Lock this tab"
   },

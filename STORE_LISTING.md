@@ -77,7 +77,19 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.13.2 (update submission)
+## What's new in 3.14.0 (update submission)
+
+User-visible, for the version notes if the form asks:
+- New "Pin this tab" switch in the popup - pin or unpin the tab you are on
+  without leaving it. The popup now shows three switches: "Protect pinned tabs"
+  (global), "Pin this tab", and "Lock this tab".
+- The popup's scrollbar is now a slim custom bar that stays out of the way and
+  fades in only while you are pointing at the list, instead of the heavy
+  always-on native bar.
+- Closing the pinned tab you are currently on re-opens the popup on the tab you
+  land on (where Chrome supports it), so it no longer just disappears.
+
+## What's new in 3.13.2
 
 User-visible, for the version notes if the form asks:
 - Each pinned tab in the popup now has a close button on the right. It asks to

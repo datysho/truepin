@@ -108,11 +108,43 @@
         letter-spacing: 0.1px;
       }
 
-      /* The one scroll region: header and the footer bar stay put. */
+      /* The one scroll region: header and the footer bar stay put. A custom
+         thin scrollbar that hides at rest and fades in only while the pointer is
+         in the region (or a child is focused), so it never reads as "always
+         there" the way the native bar did. It still appears only when the
+         content actually overflows - overflow-y:auto. */
       .scroll {
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+        transition: scrollbar-color 0.2s ease;
+      }
+      .scroll:hover,
+      .scroll:focus-within {
+        scrollbar-color: var(--border) transparent;
+      }
+      .scroll::-webkit-scrollbar {
+        width: 8px;
+      }
+      .scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scroll::-webkit-scrollbar-thumb {
+        background: transparent;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        background-clip: padding-box;
+        transition: background-color 0.2s ease;
+      }
+      .scroll:hover::-webkit-scrollbar-thumb,
+      .scroll:focus-within::-webkit-scrollbar-thumb {
+        background: var(--border);
+      }
+      .scroll::-webkit-scrollbar-thumb:hover {
+        background: var(--track);
       }
 
       section {
@@ -138,12 +170,12 @@
         padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
       .lock-row {
         background: var(--tonal);
         border-radius: 12px;
-        padding: 12px 14px;
+        padding: 10px 14px;
       }
       /* "Lock this tab" is inert when there is no eligible tab (none active, or
          the active tab is pinned and governed by the row above): grey it out. */
@@ -640,6 +672,10 @@
         <label class="row lock-row">
           <span class="switch-label" data-i18n="popupAutoLockLabel"></span>
           <input type="checkbox" id="protectToggle" class="switch" />
+        </label>
+        <label class="row lock-row" id="pinRow">
+          <span class="switch-label" data-i18n="popupPinLabel"></span>
+          <input type="checkbox" id="pinToggle" class="switch" />
         </label>
         <label class="row lock-row" id="lockRow">
           <span class="switch-label" data-i18n="popupLockLabel"></span>

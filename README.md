@@ -100,7 +100,7 @@ Pinned tabs form logical groups, and every group is present in every normal wind
 
 ## Saved sets and autosaves
 
-The popup (on the toolbar icon) shows the current pinned tabs with favicons, a lock on each protected one and a close button on hover that removes the pin for good, plus two always-visible switches - "Protect pinned tabs" (the global setting) and "Lock this tab" (greyed when the active tab is pinned or absent). Below: saving the set under a name, the list of sets, and a collapsible list of autosaves. It also lists any manually-locked non-pinned tabs in a **LOCKED** section.
+The popup (on the toolbar icon) shows the current pinned tabs with favicons, a lock on each protected one and a close button on hover that removes the pin for good, plus three always-visible switches - "Protect pinned tabs" (the global setting), "Pin this tab" (pin or unpin the current tab), and "Lock this tab" (greyed when the active tab is pinned or absent). Below: saving the set under a name, the list of sets, and a collapsible list of autosaves. It also lists any manually-locked non-pinned tabs in a **LOCKED** section.
 
 - The switch at the top is contextual: on a pinned tab it toggles the protection of all pinned tabs; on a regular tab it is that tab's own manual lock.
 - **Restoring is a smart diff:** tabs that match by URL stay in place without reloading, missing ones open, extras close, and the order follows the set. The result is mirrored into all windows.

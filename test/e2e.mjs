@@ -805,6 +805,17 @@ async function main() {
     const pinAfter = await pinnedOf(snapWindowId);
     assert(pinAfter.length === pinBefore.length, "the arming click removes no pin");
 
+    step("pin / lock switches render for the active (unpinned popup) tab");
+    const switches = await page.evaluate(() => ({
+      hasPin: !!document.getElementById("pinToggle"),
+      pinDisabled: document.getElementById("pinToggle").disabled,
+      pinChecked: document.getElementById("pinToggle").checked,
+      lockDisabled: document.getElementById("lockToggle").disabled,
+    }));
+    assert(switches.hasPin && !switches.pinDisabled, "'Pin this tab' shown and enabled on a normal tab");
+    assert(!switches.pinChecked, "'Pin this tab' unchecked for an unpinned tab");
+    assert(!switches.lockDisabled, "'Lock this tab' enabled while the tab is unpinned");
+
     step("close popup page");
     await page.close().catch(() => {});
   });
@@ -2099,6 +2110,30 @@ async function main() {
       (await swEval(() => globalThis.__tpTryApplyUpdate(true))) === "none",
       "no pending update, no action",
     );
+  });
+
+  await test("popup pin switch: ui:setPinned pins and unpins the active tab", async () => {
+    const { tab } = await openPage("/pinswitch");
+    const pinnedNow = () =>
+      swEval(
+        (id) =>
+          new Promise((r) =>
+            chrome.tabs.get(id, (x) => {
+              void chrome.runtime.lastError;
+              r(x ? x.pinned : null);
+            }),
+          ),
+        tab.id,
+      );
+    assert((await pinnedNow()) === false, "starts unpinned");
+    await swEval((r) => globalThis.__tpUiCall(r), { type: "ui:setPinned", tabId: tab.id, on: true });
+    await waitFor("pinned via ui:setPinned", async () => (await pinnedNow()) === true, 6000, 200);
+    await swEval((r) => globalThis.__tpUiCall(r), { type: "ui:setPinned", tabId: tab.id, on: false });
+    await waitFor("unpinned via ui:setPinned", async () => (await pinnedNow()) === false, 6000, 200);
+    step("cleanup");
+    await sleep(1600); // let unpin-confirm settle before removing
+    await removeTab(tab.id);
+    await sleep(400);
   });
 
   await test("popup close button: ui:closePinned removes a protected pin for good (no resurrection)", async () => {

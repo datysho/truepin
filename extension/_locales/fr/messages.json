@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin : non protégé"
   },
+  "popupPinLabel": {
+    "message": "Épingler cet onglet"
+  },
   "popupLockLabel": {
     "message": "Verrouiller cet onglet"
   },

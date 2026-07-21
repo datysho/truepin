@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin: sin protección"
   },
+  "popupPinLabel": {
+    "message": "Fijar esta pestaña"
+  },
   "popupLockLabel": {
     "message": "Bloquear esta pestaña"
   },

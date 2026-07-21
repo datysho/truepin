@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin：未保护"
   },
+  "popupPinLabel": {
+    "message": "固定此标签页"
+  },
   "popupLockLabel": {
     "message": "锁定此标签页"
   },

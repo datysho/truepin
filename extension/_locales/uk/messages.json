@@ -8,6 +8,9 @@
   "actionUnprotected": {
     "message": "TruePin: без захисту"
   },
+  "popupPinLabel": {
+    "message": "Закріпити цю вкладку"
+  },
   "popupLockLabel": {
     "message": "Замок на цій вкладці"
   },
