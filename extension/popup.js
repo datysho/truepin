@@ -179,14 +179,13 @@ function focusTab(id, win) {
 }
 
 function render() {
-  // Three controls, all always shown:
-  //  - "Protect pinned tabs" drives the GLOBAL auto-protection setting.
+  // Two controls for the active tab (the global "Protect pinned tabs" setting
+  // lives in Options, not here):
   //  - "Pin this tab" is the active tab's own pinned state (inert without one).
   //  - "Lock this tab" is the active tab's own manual lock; inert (greyed) when
   //    there is no active tab, or the active tab is pinned - a pinned tab is
   //    governed by "Protect pinned tabs", not by a per-tab lock.
   const active = state.active;
-  $("protectToggle").checked = !!state.settings.autoLockPinned;
 
   const pinToggle = $("pinToggle");
   const pinDisabled = !active;
@@ -197,7 +196,10 @@ function render() {
   const lockDisabled = !active || !!active.pinned;
   const lockToggle = $("lockToggle");
   lockToggle.disabled = lockDisabled;
-  lockToggle.checked = !lockDisabled && !!active.protected;
+  // Reflect the tab's real protected state even while disabled: a pinned tab
+  // protected by the global setting shows the greyed switch ON, not OFF - the
+  // control is inert, but it still tells the truth about the tab.
+  lockToggle.checked = !!(active && active.protected);
   $("lockRow").classList.toggle("disabled", lockDisabled);
 
   // Current pinned tabs.
@@ -346,11 +348,6 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeTabId = tab ? tab.id : undefined;
 
-  $("protectToggle").addEventListener("change", async () => {
-    const result = await send({ type: "ui:setAutoLock", on: $("protectToggle").checked });
-    if (result && result.error) setStatus(t(result.error), true);
-    refresh();
-  });
   $("pinToggle").addEventListener("change", async () => {
     // render() disables this without an active tab; guard anyway.
     if (!state || !state.active) return;
