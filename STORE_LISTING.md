@@ -77,7 +77,16 @@ https://github.com/datysho/truepin/blob/main/PRIVACY.md
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.12.0 (update submission)
+## What's new in 3.12.1 (update submission)
+
+User-visible, for the version notes if the form asks:
+- Fixed: the toolbar icon could stay colored after disabling and re-enabling
+  the extension while the settings still read "monochrome"; the icon now
+  reapplies your chosen style on every start.
+- Fixed: a protected tab in a live Google Meet call no longer forks into
+  duplicate tabs when the call reconnects - in-page redirects stay in place.
+
+## What's new in 3.12.0
 
 User-visible, for the version notes if the form asks:
 - Export/import: Options can write settings and named sets to a JSON file

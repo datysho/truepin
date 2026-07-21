@@ -1581,6 +1581,13 @@ async function main() {
       ["subframe commit", { transitionType: "typed", transitionQualifiers: ["from_address_bar"], frameId: 7 }],
       ["JS redirect dressed as link", { transitionType: "link", transitionQualifiers: ["client_redirect"] }],
       ["server redirect link", { transitionType: "link", transitionQualifiers: ["server_redirect"] }],
+      // A redirect can commit tagged with an address-bar transitionType. Google
+      // Meet's in-call reconnects do exactly this - "generated"/"typed" with a
+      // client_redirect qualifier - and the pre-fix classifier read them as an
+      // omnibox act and forked the live call into duplicate tabs.
+      ["client redirect tagged generated (Meet in-call)", { transitionType: "generated", transitionQualifiers: ["client_redirect"] }],
+      ["client redirect tagged typed + from_address_bar", { transitionType: "typed", transitionQualifiers: ["client_redirect", "from_address_bar"] }],
+      ["server redirect tagged generated", { transitionType: "generated", transitionQualifiers: ["server_redirect"] }],
     ];
     for (const [name, d] of cases) {
       const kind = await swEval((details) => globalThis.__tpSimulateNavCommit(details), {
@@ -2077,6 +2084,35 @@ async function main() {
       (await swEval(() => globalThis.__tpTryApplyUpdate(true))) === "none",
       "no pending update, no action",
     );
+  });
+
+  await test("re-enable: worker wake re-settles the mirror so per-tab icons reapply", async () => {
+    step("mono style, pin a tab, settle once");
+    await swEval(() => chrome.storage.sync.set({ settings: { iconStyle: "mono" } }));
+    const { tab } = await openPage("/reenable");
+    await setPinned(tab.id, true);
+    await waitFor("settled once", async () =>
+      swEval(async () => (await chrome.storage.session.get("mirrorReady")).mirrorReady === true),
+    );
+    step("re-enable: session wiped, fresh worker, no onInstalled/onStartup");
+    await swEval(() => globalThis.__tpSimulateReenable());
+    const resettled = await waitFor(
+      "mirror re-settles after re-enable",
+      async () =>
+        swEval(async () => (await chrome.storage.session.get("mirrorReady")).mirrorReady === true),
+      6000,
+      200,
+    );
+    // The settle IS the icon reapply: bootstrapAll refreshes every tab, and
+    // refreshTab writes the iconStyle icon. Pre-fix, nothing ran on re-enable,
+    // so the toolbar kept the manifest default (color) while settings read mono.
+    assert(resettled, "re-enable reruns bootstrap, reapplying iconStyle to every tab");
+    step("cleanup");
+    await swEval(() => chrome.storage.sync.remove("settings"));
+    await setPinned(tab.id, false);
+    await sleep(1600);
+    await removeTab(tab.id);
+    await sleep(400);
   });
 
   await test("service worker: no unchecked runtime errors during the run", async () => {

@@ -860,6 +860,21 @@ chrome.runtime.onStartup.addListener(() => {
   broadcastLockedFront(); // the sibling re-queries at its settle; this is the early hint
 });
 
+// Re-enabling the extension (toggle off then on in chrome://extensions) starts
+// a fresh worker but fires NEITHER onInstalled (that is install/update only)
+// NOR onStartup (browser launch only). Chrome resets every per-tab action icon
+// to the manifest default_icon (color unlocked) on that transition, so without
+// a bootstrap the toolbar shows color while the stored iconStyle is still mono:
+// settings and the visible icon diverge until some unrelated tab event fires.
+// The top-level wake trigger closes the gap. It is cheap on a warm wake - the
+// enqueued bootstrap checks isMirrorReady and returns at once when the session
+// survived; it does real work only when storage.session was wiped (re-enable,
+// cold start), which is exactly when the icons need reapplying.
+function onWorkerWake() {
+  ensureColdBootstrap();
+}
+onWorkerWake();
+
 // --- update applier ---------------------------------------------------------
 // Chrome downloads CWS updates in the background and applies them when the
 // extension goes idle; a busy worker or an open page can defer that
@@ -1189,6 +1204,14 @@ function redirectKind(details) {
   if (qualifiers.includes("forward_back")) return null;
   // Retyping the current URL commits as a reload; reloads stay in place.
   if (details.transitionType === "reload") return null;
+  // A JS or server redirect is never a user navigation act, whatever
+  // transitionType it carries. This guard is global, not just on the link
+  // branch: Google Meet's in-call redirects commit tagged "generated"/"typed"
+  // WITH a client_redirect qualifier, and the address branch below would read
+  // that as an omnibox act and fork the live call into a duplicate tab on
+  // every reconnect. Redirects (client or server) stay in place, always -
+  // breaking an OAuth chain or a Meet reconnect mid-flight helps nobody.
+  if (qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect")) return null;
   if (
     qualifiers.includes("from_address_bar") ||
     // Chromium forks with custom address bars can omit the qualifier.
@@ -1196,15 +1219,8 @@ function redirectKind(details) {
   ) {
     return "address";
   }
-  // Only real clicks: JS and server redirects carry qualifiers and must pass
-  // (breaking an OAuth chain mid-flight helps nobody).
-  if (
-    details.transitionType === "link" &&
-    !qualifiers.includes("client_redirect") &&
-    !qualifiers.includes("server_redirect")
-  ) {
-    return "link";
-  }
+  // Only real clicks reach here (redirects already returned above).
+  if (details.transitionType === "link") return "link";
   return null;
 }
 
@@ -2060,6 +2076,20 @@ globalThis.__tpWipeState = () =>
     coldBootstrapInFlight = false;
     chrome.storage.session.clear(() => {
       void chrome.runtime.lastError;
+      resolve(true);
+    });
+  });
+// Test hook: a chrome://extensions re-enable - storage.session wiped, a fresh
+// worker, and NEITHER onInstalled nor onStartup fires. Only the module's
+// top-level wake trigger runs, so this reproduces that single side-effect. It
+// must re-settle the mirror (and thus reapply the iconStyle icon), or the
+// toolbar keeps the manifest default while settings show the real style.
+globalThis.__tpSimulateReenable = () =>
+  new Promise((resolve) => {
+    coldBootstrapInFlight = false;
+    chrome.storage.session.clear(() => {
+      void chrome.runtime.lastError;
+      onWorkerWake();
       resolve(true);
     });
   });
