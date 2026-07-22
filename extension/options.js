@@ -39,8 +39,6 @@ async function load() {
   applyTheme(merged.theme);
 }
 
-let savedTimer = null;
-
 async function save() {
   const patch = {};
   for (const field of FIELDS) {
@@ -65,12 +63,7 @@ async function save() {
   await chrome.storage.sync.set({ settings });
   applyTheme(settings.theme);
   await localize(); // language may have changed
-  const saved = document.getElementById("saved");
-  saved.style.visibility = "visible";
-  clearTimeout(savedTimer);
-  savedTimer = setTimeout(() => {
-    saved.style.visibility = "hidden";
-  }, 1500);
+  showToast("saved");
 }
 
 for (const field of FIELDS) {

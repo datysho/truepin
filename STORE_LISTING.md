@@ -81,7 +81,7 @@ scripts; see CLAUDE.md "Commands").
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.15.4 (update submission)
+## What's new in 3.15.5 (update submission)
 
 Form-ready release notes (this update bundles everything since the last
 published build). Paste into the "What's new" field if the form asks:
@@ -111,7 +111,8 @@ Polish:
   a lane, so the content never shifts or sits off-center, and switches that open
   already in their correct position.
 - Tidier settings page: the diagnostics, export and import actions sit in one
-  aligned row, and each one now confirms with a single consistent toast.
+  centered row, and every confirmation - saved, copied, exported, imported -
+  now speaks through a single consistent toast.
 
 Post-publish TODO (carried by the release checklist): when TrueTabs gets its own
 Web Store id, add it to FAMILY_IDS in background.js (the dev-key id already works
