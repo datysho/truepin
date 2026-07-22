@@ -78,22 +78,25 @@ for (const field of FIELDS) {
 }
 localize().then(load);
 
+// One toast for every transient confirmation, so copy / export / import all
+// speak with one uniform voice instead of a note wedged beside each button.
+let toastTimer = null;
+function showToast(key, kind = "ok") {
+  const toast = document.getElementById("toast");
+  toast.textContent = tpI18n.t(key);
+  toast.classList.toggle("err", kind === "err");
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
 // --- backup: export / import ------------------------------------------------
 // One clean JSON file: settings + named sets. No secrets exist in TruePin,
 // so there is nothing to opt into. Import is additive-by-name for sets and
 // goes through the engine (validated, serialized with everything else).
-function dataNote(key) {
-  const note = document.getElementById("dataNote");
-  note.textContent = tpI18n.t(key);
-  note.style.visibility = "visible";
-  setTimeout(() => {
-    note.style.visibility = "hidden";
-  }, 2500);
-}
-
 document.getElementById("exportBtn").addEventListener("click", async () => {
   const payload = await chrome.runtime.sendMessage({ type: "ui:exportData" });
-  if (!payload || payload.error) return dataNote("dataFailed");
+  if (!payload || payload.error) return showToast("dataFailed", "err");
   const stamp = new Date().toISOString().slice(0, 10);
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -101,7 +104,7 @@ document.getElementById("exportBtn").addEventListener("click", async () => {
   a.download = `truepin-settings-${payload.version}-${stamp}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-  dataNote("dataExported");
+  showToast("dataExported");
 });
 
 document.getElementById("importBtn").addEventListener("click", () => {
@@ -112,30 +115,30 @@ document.getElementById("importFile").addEventListener("change", async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = ""; // re-selecting the same file must fire again
   if (!file) return;
-  if (file.size > tpPlatform.IMPORT_MAX_BYTES) return dataNote("dataFailed");
+  if (file.size > tpPlatform.IMPORT_MAX_BYTES) return showToast("dataFailed", "err");
   let parsed = null;
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    return dataNote("dataFailed");
+    return showToast("dataFailed", "err");
   }
   const result = await chrome.runtime.sendMessage({ type: "ui:importData", payload: parsed });
-  if (!result || !result.ok) return dataNote("dataFailed");
+  if (!result || !result.ok) return showToast("dataFailed", "err");
   await localize();
   await load(); // repaint the controls from the imported truth
-  dataNote("dataImported");
+  showToast("dataImported");
 });
 
 // One-click diagnostics: full engine state to the clipboard, so a weirdness
 // report can carry the evidence without opening a console.
 document.getElementById("diagBtn").addEventListener("click", async () => {
   const dump = await chrome.runtime.sendMessage({ type: "ui:diagnostics" });
-  await navigator.clipboard.writeText(JSON.stringify(dump, null, 2));
-  const note = document.getElementById("diagCopied");
-  note.style.visibility = "visible";
-  setTimeout(() => {
-    note.style.visibility = "hidden";
-  }, 2500);
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(dump, null, 2));
+  } catch {
+    return showToast("dataFailed", "err");
+  }
+  showToast("optDiagCopied");
 });
 
 document.getElementById("version").textContent = "v" + chrome.runtime.getManifest().version;

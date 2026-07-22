@@ -243,15 +243,61 @@
         align-self: flex-end;
         padding-bottom: 2px;
       }
-      .footrow {
+      /* One tidy right-aligned row of actions under the card. */
+      .actions {
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         align-items: center;
         gap: 10px;
         margin-top: 16px;
       }
-      .footrow .note {
-        color: var(--ok);
-        font-size: 12px;
+
+      /* One toast for every transient confirmation (copied / exported /
+         imported / failed): an inverted pill that slides up from the bottom
+         and fades out - uniform, out of the layout, no note jammed beside a
+         button. */
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translateX(-50%) translateY(12px);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: min(90vw, 440px);
+        padding: 10px 18px;
+        border-radius: 100px;
+        background: var(--text);
+        color: var(--bg);
+        font-size: 12.5px;
+        font-weight: 500;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease, transform 0.22s ease;
+        z-index: 20;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .toast::before {
+        content: "";
+        width: 15px;
+        height: 15px;
+        flex: none;
+        background-color: currentColor;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+      .toast.err {
+        background: #c5221f;
+        color: #ffffff;
+      }
+      .toast.err::before {
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") center / contain no-repeat;
       }
     </style>
   </head>
@@ -362,17 +408,14 @@
       </div>
 
       <p id="saved" data-i18n="saved"></p>
-      <div class="footrow">
+      <div class="actions">
         <button id="diagBtn" data-i18n="optDiag"></button>
-        <span class="note" id="diagCopied" style="visibility: hidden" data-i18n="optDiagCopied"></span>
-      </div>
-      <div class="footrow">
         <button id="exportBtn" data-i18n="dataExport"></button>
         <button id="importBtn" data-i18n="dataImport"></button>
         <input type="file" id="importFile" accept="application/json" hidden />
-        <span class="note" id="dataNote" style="visibility: hidden"></span>
       </div>
     </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="i18n.js"></script>
     <script src="platform.js"></script>

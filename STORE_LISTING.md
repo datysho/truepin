@@ -81,7 +81,7 @@ scripts; see CLAUDE.md "Commands").
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.15.3 (update submission)
+## What's new in 3.15.4 (update submission)
 
 Form-ready release notes (this update bundles everything since the last
 published build). Paste into the "What's new" field if the form asks:
@@ -96,9 +96,9 @@ New:
   alone, unchanged).
 
 Fixed:
-- Closing a pinned tab that was not the last one no longer sends it to the end
-  of the pinned strip when it comes back; a reopened pin returns to its own
-  place, so your pinned order stays put.
+- Closing a pinned tab now brings it back exactly where it sat - even after you
+  have reordered your pinned tabs by dragging - instead of dropping it at the
+  end of the strip.
 - The toolbar icon could stay colored after disabling and re-enabling the
   extension while set to monochrome; it now reapplies your chosen style on
   every start.
@@ -110,6 +110,8 @@ Polish:
 - Smoother popup: a slim scrollbar that floats over the list instead of taking
   a lane, so the content never shifts or sits off-center, and switches that open
   already in their correct position.
+- Tidier settings page: the diagnostics, export and import actions sit in one
+  aligned row, and each one now confirms with a single consistent toast.
 
 Post-publish TODO (carried by the release checklist): when TrueTabs gets its own
 Web Store id, add it to FAMILY_IDS in background.js (the dev-key id already works

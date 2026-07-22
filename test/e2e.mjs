@@ -488,6 +488,130 @@ async function main() {
     }
   });
 
+  await test("protection: a session-restored middle pin keeps its slot natively, and does not churn", async () => {
+    // The reopen leans on chrome.sessions.restore, which returns the tab to the
+    // index it was closed from on its own - so no reposition move is needed (and
+    // the move that v3.15.3 added onto the last slot unpinned the pin and
+    // resurrected it in a loop). Close a MIDDLE pin so "native kept the slot"
+    // is distinguishable from "it was appended", then confirm the reopened pin
+    // is not churning a second later.
+    for (const marker of ["/ses1", "/ses2", "/ses3"]) {
+      const { tab } = await openPage(marker);
+      await setPinned(tab.id, true);
+      await waitFor(`${marker} protected`, async () => (await tabState(tab.id))?.protected === true);
+    }
+    const windowId = (await findTab("/ses2")).windowId;
+    const sesOrder = async () =>
+      (await pinnedOf(windowId))
+        .map((p) => (p.url.match(/\/(ses\d)/) || [])[1])
+        .filter(Boolean)
+        .join(",");
+    await waitFor("three ses pins in order", async () => (await sesOrder()) === "ses1,ses2,ses3");
+
+    step("close the middle pin (real close -> recently-closed -> native restore)");
+    const before = await findTab("/ses2");
+    await removeTab(before.id);
+    await waitFor(
+      "ses2 reopened under a new id",
+      async () => {
+        const t = await findTab("/ses2");
+        return t && t.id !== before.id ? t : null;
+      },
+      10_000,
+      200,
+    );
+    await sleep(700);
+    assert((await sesOrder()) === "ses1,ses2,ses3", `native restore kept the slot (got ${await sesOrder()})`);
+
+    step("no reopen storm: the restored pin's id is stable a second later");
+    const settledId = (await findTab("/ses2")).id;
+    await sleep(1200);
+    const laterId = (await findTab("/ses2"))?.id;
+    assert(laterId === settledId, `ses2 not churning (was ${settledId}, now ${laterId})`);
+
+    step("cleanup");
+    for (const marker of ["/ses1", "/ses2", "/ses3"]) {
+      const t = await findTab(marker);
+      if (!t) continue;
+      await setPinned(t.id, false);
+      await sleep(900);
+      const live = await findTab(marker);
+      if (live) await removeTab(live.id);
+      await sleep(300);
+    }
+  });
+
+  await test("protection: a dragged pin, once closed, returns to its dragged slot (canon follows the strip)", async () => {
+    // Michael's report: a pin dragged out of its original spot came back at the
+    // stale canon slot (the strip end) instead of where it now sits. Dragging
+    // must move the canon order too. Force the re-create fallback (empty session
+    // list) so placement comes purely from the canon slot the drag updated -
+    // red before the onMoved resync, green after.
+    await swEval(() => {
+      globalThis.__origGetRecentlyClosed = chrome.sessions.getRecentlyClosed;
+      chrome.sessions.getRecentlyClosed = () => Promise.resolve([]);
+    });
+    try {
+      for (const marker of ["/drg1", "/drg2", "/drg3"]) {
+        const { tab } = await openPage(marker);
+        await setPinned(tab.id, true);
+        await waitFor(
+          `${marker} protected`,
+          async () => (await tabState(tab.id))?.protected === true,
+        );
+      }
+      const windowId = (await findTab("/drg3")).windowId;
+      const drgOrder = async () =>
+        (await pinnedOf(windowId))
+          .map((p) => (p.url.match(/\/(drg\d)/) || [])[1])
+          .filter(Boolean)
+          .join(",");
+      await waitFor("three drg pins in order", async () => (await drgOrder()) === "drg1,drg2,drg3");
+
+      step("drag the last pin to the front of the strip");
+      const drg3 = await findTab("/drg3");
+      await swEval((id) => chrome.tabs.move(id, { index: 0 }), drg3.id);
+      await waitFor(
+        "strip reordered to drg3,drg1,drg2",
+        async () => (await drgOrder()) === "drg3,drg1,drg2",
+      );
+      await sleep(600); // let the debounced canon resync land
+
+      step("close the dragged pin; it must come back at the front, where it now sits");
+      const before = await findTab("/drg3");
+      await removeTab(before.id);
+      await waitFor(
+        "drg3 reopened under a new id",
+        async () => {
+          const t = await findTab("/drg3");
+          return t && t.id !== before.id ? t : null;
+        },
+        10_000,
+        200,
+      );
+      await sleep(600);
+      const after = await drgOrder();
+      assert(after === "drg3,drg1,drg2", `dragged pin returns to its dragged slot (got ${after})`);
+    } finally {
+      await swEval(() => {
+        if (globalThis.__origGetRecentlyClosed) {
+          chrome.sessions.getRecentlyClosed = globalThis.__origGetRecentlyClosed;
+          delete globalThis.__origGetRecentlyClosed;
+        }
+      });
+      step("cleanup: unpin and close the three drg pins");
+      for (const marker of ["/drg1", "/drg2", "/drg3"]) {
+        const t = await findTab(marker);
+        if (!t) continue;
+        await setPinned(t.id, false);
+        await sleep(900);
+        const live = await findTab(marker);
+        if (live) await removeTab(live.id);
+        await sleep(300);
+      }
+    }
+  });
+
   await test("locked shelf: manual-locked non-pinned tabs surface in getState and clear to null", async () => {
     step("open a regular tab and manually lock it");
     const a = await openPage("/lock-a");

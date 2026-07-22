@@ -1448,17 +1448,13 @@ async function reopenTab(state, windowId, settings, pinnedSlot) {
       if (restored && restored.tab) {
         newTab = restored.tab;
         traceDiag(`reopen: session-restored ${pathKey(url)} -> ${newTab.id}`);
-        // chrome.sessions.restore lands the tab at the end of the strip; move
-        // it back to the slot it held so the pinned order is preserved.
-        if (
-          typeof pinnedSlot === "number" &&
-          newTab.pinned &&
-          newTab.id !== undefined &&
-          (windowId === undefined || newTab.windowId === windowId)
-        ) {
-          const moved = await quiet(chrome.tabs.move, newTab.id, { index: pinnedSlot });
-          if (moved && !Array.isArray(moved)) newTab = moved;
-        }
+        // Do NOT reposition a session-restored pin: chrome.sessions.restore
+        // already returns it to the index it was closed from, and a
+        // chrome.tabs.move onto the last pinned slot races the restore's own
+        // pin bookkeeping - the tab lands in the unpinned zone, gets unpinned,
+        // and the protection resurrects it in a loop (v3.15.3 reopen storm).
+        // The plain re-create fallback below is the only path that has to place
+        // the pin itself, and it does so with a create index, which is safe.
       }
       break;
     }
@@ -1645,8 +1641,50 @@ function scheduleEnforceLockedFront(windowId) {
   }, 200);
 }
 
+// A pinned tab was dragged: the canon order must follow the visible strip, or
+// a later reopen or converge fights what the user just arranged - a closed pin
+// resurrected into a stale slot (v3.15.3: fathom dragged to the middle came
+// back at the end because the canon still had it last), or a manual reorder
+// silently undone. Scoped to the single-window case, where the strip IS the
+// whole order unambiguously; with several windows the converge engine owns
+// cross-window placement. Only a pure reorder of the same set is written -
+// adds and drops have their own handlers, and reacting to a half-applied strip
+// would race them.
+async function resyncOrderToStrip(windowId) {
+  const settings = await getSettings();
+  if (!settings.mirrorPinned) return;
+  if (!(await isMirrorReady())) return;
+  const wins = await normalWindows();
+  if (wins.length !== 1 || wins[0].id !== windowId) return;
+  const mirror = await getMirror();
+  const order = [];
+  for (const tab of await pinnedTabsOf(windowId)) {
+    if (isEphemeralUrl(tabUrl(tab))) continue;
+    const gid = groupOfTab(mirror, tab.id);
+    if (gid && !order.includes(gid)) order.push(gid);
+  }
+  const sameSet =
+    order.length === mirror.order.length && order.every((g) => mirror.order.includes(g));
+  if (sameSet && order.join(",") !== mirror.order.join(",")) {
+    mirror.order = order;
+    await putMirror(mirror);
+    traceDiag(`order resynced to strip @win=${windowId}: ${order.join(",")}`);
+  }
+}
+
+const orderResyncTimers = {};
+function scheduleResyncOrder(windowId) {
+  if (windowId === undefined || windowId === chrome.windows.WINDOW_ID_NONE) return;
+  clearTimeout(orderResyncTimers[windowId]);
+  orderResyncTimers[windowId] = setTimeout(() => {
+    delete orderResyncTimers[windowId];
+    enqueue(() => resyncOrderToStrip(windowId), "order-resync");
+  }, 250);
+}
+
 chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
   scheduleEnforceLockedFront(moveInfo.windowId);
+  scheduleResyncOrder(moveInfo.windowId);
 });
 chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
   scheduleEnforceLockedFront(attachInfo.newWindowId);
