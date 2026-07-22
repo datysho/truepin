@@ -81,7 +81,7 @@ scripts; see CLAUDE.md "Commands").
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.15.2 (update submission)
+## What's new in 3.15.3 (update submission)
 
 Form-ready release notes (this update bundles everything since the last
 published build). Paste into the "What's new" field if the form asks:
@@ -96,6 +96,9 @@ New:
   alone, unchanged).
 
 Fixed:
+- Closing a pinned tab that was not the last one no longer sends it to the end
+  of the pinned strip when it comes back; a reopened pin returns to its own
+  place, so your pinned order stays put.
 - The toolbar icon could stay colored after disabling and re-enabling the
   extension while set to monochrome; it now reapplies your chosen style on
   every start.

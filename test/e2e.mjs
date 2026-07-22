@@ -418,6 +418,76 @@ async function main() {
   const autoRing = () =>
     swEval(async () => (await chrome.storage.local.get("autoSnaps")).autoSnaps || []);
 
+  await test("protection: a closed middle pin reopens in its slot, not at the strip end", async () => {
+    // Three pins in order; closing the middle one must bring it back where it
+    // sat. A protected close is a resurrection, not a reorder - the pinned
+    // strip's order has to survive the round-trip.
+    //
+    // The reopen tries chrome.sessions.restore first (which, in this test
+    // browser, happens to keep the index) and falls back to a plain re-create
+    // when no session entry matches - the path real users hit when the closed
+    // tab has drifted out of the recently-closed list. That fallback is where
+    // <=3.15.2 dropped the pin at the END of the strip. Stub the session
+    // lookup empty so the test exercises the fallback deterministically: red on
+    // 3.15.2, green here.
+    await swEval(() => {
+      globalThis.__origGetRecentlyClosed = chrome.sessions.getRecentlyClosed;
+      chrome.sessions.getRecentlyClosed = () => Promise.resolve([]);
+    });
+    try {
+      for (const marker of ["/ord1", "/ord2", "/ord3"]) {
+        const { tab } = await openPage(marker);
+        await setPinned(tab.id, true);
+        await waitFor(
+          `${marker} protected`,
+          async () => (await tabState(tab.id))?.protected === true,
+        );
+      }
+      const windowId = (await findTab("/ord2")).windowId;
+      // Just our three pins, in strip order (ignores anything else pinned).
+      const ordOrder = async () =>
+        (await pinnedOf(windowId))
+          .map((p) => (p.url.match(/\/(ord\d)/) || [])[1])
+          .filter(Boolean)
+          .join(",");
+      await waitFor("three ord pins in order", async () => (await ordOrder()) === "ord1,ord2,ord3");
+
+      step("close the middle pin");
+      const before = await findTab("/ord2");
+      await removeTab(before.id);
+      await waitFor(
+        "ord2 reopened under a new id",
+        async () => {
+          const t = await findTab("/ord2");
+          return t && t.id !== before.id ? t : null;
+        },
+        10_000,
+        200,
+      );
+      // Give any stray reorder a chance to land before asserting the order held.
+      await sleep(600);
+      const after = await ordOrder();
+      assert(after === "ord1,ord2,ord3", `pinned order preserved after reopen (got ${after})`);
+    } finally {
+      await swEval(() => {
+        if (globalThis.__origGetRecentlyClosed) {
+          chrome.sessions.getRecentlyClosed = globalThis.__origGetRecentlyClosed;
+          delete globalThis.__origGetRecentlyClosed;
+        }
+      });
+      step("cleanup: unpin and close the three ord pins");
+      for (const marker of ["/ord1", "/ord2", "/ord3"]) {
+        const t = await findTab(marker);
+        if (!t) continue;
+        await setPinned(t.id, false);
+        await sleep(900);
+        const live = await findTab(marker);
+        if (live) await removeTab(live.id);
+        await sleep(300);
+      }
+    }
+  });
+
   await test("locked shelf: manual-locked non-pinned tabs surface in getState and clear to null", async () => {
     step("open a regular tab and manually lock it");
     const a = await openPage("/lock-a");

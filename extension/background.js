@@ -1320,6 +1320,22 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     const settings = await getSettings();
     const mirror = await getMirror();
     const gid = groupOfTab(mirror, tabId);
+    // Where this pin sat among its window's pins, read from the canonical
+    // order before the group loses its member - so a protected reopen returns
+    // it to the same slot instead of dumping it at the end of the strip.
+    let pinnedSlot;
+    if (
+      gid &&
+      removeInfo.windowId !== undefined &&
+      removeInfo.windowId !== chrome.windows.WINDOW_ID_NONE
+    ) {
+      pinnedSlot = 0;
+      for (const g of mirror.order) {
+        if (g === gid) break;
+        const grp = mirror.groups[g];
+        if (grp && grp.members[removeInfo.windowId] !== undefined) pinnedSlot++;
+      }
+    }
     if (gid) {
       for (const [win, memberId] of Object.entries(mirror.groups[gid].members)) {
         if (memberId === tabId) delete mirror.groups[gid].members[win];
@@ -1365,10 +1381,19 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
       (wasPinnedAtClose && computeProtected({ ...state, pinned: true }, settings));
 
     if (protectedAtClose) {
-      // The rule: protected tabs do not close. Bring it back, silently.
-      // The group stays; the reopened tab re-adopts it by page identity.
-      await finishMirror();
-      await reopenTab(state, removeInfo.windowId, settings);
+      // The rule: protected tabs do not close. Bring it back, silently, in the
+      // slot it held. A protected close is a member replacement, not a
+      // departure: keep the group (and thus its place in the canon) and rebind
+      // it to the reopened tab, so the pinned order survives the round-trip.
+      const newTab = await reopenTab(state, removeInfo.windowId, settings, pinnedSlot);
+      if (newTab && newTab.id !== undefined && gid && mirror.groups[gid]) {
+        mirror.groups[gid].members[removeInfo.windowId] = newTab.id;
+        await putMirror(mirror);
+      } else {
+        // Reopen did not happen (ephemeral, already pinned, breaker): the slot
+        // is genuinely vacated - drop the empty group and let the canon follow.
+        await finishMirror();
+      }
       return;
     }
 
@@ -1381,12 +1406,15 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   }, "removed");
 });
 
-async function reopenTab(state, windowId, settings) {
+// Returns the reopened tab, or null when the reopen was declined (ephemeral
+// page, a copy already pinned, breaker trip). pinnedSlot, when a number, is
+// the index in the window's pin strip the tab should return to.
+async function reopenTab(state, windowId, settings, pinnedSlot) {
   const url = state.url || "";
   // Never resurrect an ephemeral page: Chrome closes the split-view picker
   // by itself, and state recorded by an older version may still claim such
   // a tab was protected. A manual lock is an explicit user decision.
-  if (state.manual !== true && isEphemeralUrl(url)) return;
+  if (state.manual !== true && isEphemeralUrl(url)) return null;
   // One pin per page per window: if the page is already pinned there, this
   // close was bookkeeping noise (a stale carried-over state, a duplicate),
   // not a user loss - resurrecting it would mint a second copy.
@@ -1398,13 +1426,13 @@ async function reopenTab(state, windowId, settings) {
     const pins = (await quiet(chrome.tabs.query, { windowId, pinned: true })) || [];
     if (pins.some((t) => pathKey(tabUrl(t)) === pathKey(url))) {
       traceDiag(`reopen skipped: ${pathKey(url)} already pinned in win=${windowId}`);
-      return;
+      return null;
     }
   }
   // The breaker is the outer net: a reopen storm is a bug by construction
   // (mass closes of protected tabs are either window closes, which skip
   // reopening, or extension closes, which are marked self-closed).
-  if (!(await takeCreateToken(`reopen ${pathKey(url)}`))) return;
+  if (!(await takeCreateToken(`reopen ${pathKey(url)}`))) return null;
   let newTab = null;
   // chrome.sessions preserves history, scroll and form state - try it first.
   for (let attempt = 0; attempt < 8 && !newTab; attempt++) {
@@ -1420,30 +1448,44 @@ async function reopenTab(state, windowId, settings) {
       if (restored && restored.tab) {
         newTab = restored.tab;
         traceDiag(`reopen: session-restored ${pathKey(url)} -> ${newTab.id}`);
+        // chrome.sessions.restore lands the tab at the end of the strip; move
+        // it back to the slot it held so the pinned order is preserved.
+        if (
+          typeof pinnedSlot === "number" &&
+          newTab.pinned &&
+          newTab.id !== undefined &&
+          (windowId === undefined || newTab.windowId === windowId)
+        ) {
+          const moved = await quiet(chrome.tabs.move, newTab.id, { index: pinnedSlot });
+          if (moved && !Array.isArray(moved)) newTab = moved;
+        }
       }
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   if (!newTab) {
-    // Fallback: plain re-create (at the end of the pin strip when pinned).
+    // Fallback: plain re-create, in the slot it held (clamped to the current
+    // strip), not at the end - a protected close must not reorder the pins.
     const target = {};
     if (windowId !== undefined && windowId !== chrome.windows.WINDOW_ID_NONE) {
       const win = await quiet(chrome.windows.get, windowId);
       if (win) target.windowId = windowId;
     }
     const wasPinned = state.pinned || state.unpinnedAt !== null;
-    const pinnedCount =
-      wasPinned && target.windowId
-        ? (await quiet(chrome.tabs.query, { windowId: target.windowId, pinned: true }) || [])
-            .length
-        : undefined;
+    let index;
+    if (wasPinned && target.windowId !== undefined) {
+      const pinnedCount = (
+        (await quiet(chrome.tabs.query, { windowId: target.windowId, pinned: true })) || []
+      ).length;
+      index = typeof pinnedSlot === "number" ? Math.min(pinnedSlot, pinnedCount) : pinnedCount;
+    }
     newTab = await quiet(chrome.tabs.create, {
       ...target,
       url: url || undefined,
       pinned: wasPinned,
       active: false,
-      ...(pinnedCount !== undefined ? { index: pinnedCount } : {}),
+      ...(index !== undefined ? { index } : {}),
     });
     traceDiag(`reopen: re-created ${pathKey(url)} -> ${newTab ? newTab.id : "failed"}`);
   }
@@ -1459,6 +1501,7 @@ async function reopenTab(state, windowId, settings) {
     applyToTab(newTab.id, carried, settings);
   }
   if (newTab && settings.notifyReopen) notifyReopened(state.manual === true);
+  return newTab;
 }
 
 // One short notification; a fixed id keeps repeats from stacking up.
