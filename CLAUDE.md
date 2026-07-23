@@ -4,8 +4,8 @@ TruePin - Chrome MV3 extension that makes pinned tabs trustworthy: pins survive 
 
 ## Commands
 
-- Test: `cd test && npm test` - run TWICE before any merge or release (flake control); 42 e2e scenarios against real Chrome for Testing.
-- Standing red/green repros (chronic bug classes, keep them runnable): `npm run test:canon`, `npm run test:multiply`, `npm run test:resurrect`, `npm run test:crystallize` - each proven red on the version that had the bug.
+- Test: `cd test && npm test` - run TWICE before any merge or release (flake control); 56 e2e scenarios against real Chrome for Testing.
+- Standing red/green repros (chronic bug classes, keep them runnable): `npm run test:canon`, `npm run test:multiply`, `npm run test:resurrect`, `npm run test:crystallize`, `npm run test:pip` - each proven red on the version that had the bug.
 - Assets (regenerate from the live extension; exact legal CWS sizes): `node test/shot-store.mjs` (1280x800 listing screenshots -> `store/screenshots/`), `node test/shot-promo.mjs` (440x280 + 1400x560 promo tiles, JPEG/no-alpha -> `store/`), `node test/shot-social.mjs` (social/hero previews). `shot.mjs`/`shot-redesign.mjs` are older eyeballing shots. Re-run the relevant one after any popup/options UI change - a readiness selector that names a since-removed element will break the shot (lesson: shot-social once hard-referenced #lockLabel).
 - Package: `./package.sh` - guarded build: strips the dev key, single zip in `dist/`, asserts packaged manifest version matches source. Rebuild after ANY version bump.
 

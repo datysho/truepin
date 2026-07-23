@@ -81,7 +81,7 @@ scripts; see CLAUDE.md "Commands").
 5. Trader/non-trader: non-trader (already declared).
 6. Submit for review.
 
-## What's new in 3.15.5 (update submission)
+## What's new in 3.15.6 (update submission)
 
 Form-ready release notes (this update bundles everything since the last
 published build). Paste into the "What's new" field if the form asks:
@@ -104,6 +104,9 @@ Fixed:
   every start.
 - A protected tab in a live Google Meet call no longer forks into duplicate
   tabs when the call reconnects.
+- Your pinned tabs no longer duplicate when a video call opens its floating
+  mini window (Google Meet does this while someone presents and you switch
+  tabs): that window is not a tab strip, and nothing is copied into it.
 
 Polish:
 - Web Store updates now apply silently at a quiet moment; your settings survive.

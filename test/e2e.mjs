@@ -186,10 +186,22 @@ async function closeAndExpectReopen(marker, closeFn) {
 function startServer() {
   const server = http.createServer((req, res) => {
     const name = req.url.replace(/\W/g, "") || "index";
+    // A /pip… page opens a Document Picture-in-Picture window when clicked -
+    // the shape Google Meet uses for its in-call mini window. Only these pages
+    // carry the handler: other tests click the body just for a user gesture.
+    const pipScript = name.startsWith("pip")
+      ? `<script>document.body.addEventListener("click", async () => {
+           try {
+             const w = await documentPictureInPicture.requestWindow({ width: 320, height: 240 });
+             w.document.body.textContent = "pip";
+             window.__pipOpen = true;
+           } catch (e) { window.__pipError = String(e); }
+         });</script>`
+      : "";
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(
       `<!doctype html><html><head><title>page-${name}</title></head>` +
-        `<body style="height:100vh;margin:0">page ${name}</body></html>`,
+        `<body style="height:100vh;margin:0">page ${name}${pipScript}</body></html>`,
     );
   });
   return new Promise((resolve) => {
@@ -1531,6 +1543,78 @@ async function main() {
     assert(totalInPopup === 1, `popup keeps only its own tab (found ${totalInPopup})`);
     step("cleanup");
     await swEval((id) => chrome.windows.remove(id).catch(() => {}), popupId);
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), normId);
+    await sleep(700);
+  });
+
+  await test("picture-in-picture window: reports type normal, still gets no copies", async () => {
+    // Google Meet opens a Document PiP window when the user leaves the call tab
+    // while somebody presents. Chrome reports it as type "normal" - windows.
+    // onCreated and windows.getAll alike - but it hosts no tab strip, and a
+    // tabs.create aimed at it silently lands the tab in the user's REAL window.
+    // Filling it therefore materialized a whole duplicate pinned set there
+    // (report 2026-07-23, v3.15.5). alwaysOnTop is what tells the two apart.
+    step("mirror on; a normal window with a pinned tab (a real group to copy)");
+    await swEval(() =>
+      chrome.storage.sync.set({
+        settings: {
+          autoLockPinned: true,
+          mirrorPinned: true,
+          autoSnapshot: false,
+          notifyReopen: false,
+          lockToFront: "off",
+          language: "auto",
+        },
+      }),
+    );
+    await sleep(700);
+    const normId = await swEval(async (base) => {
+      const win = await chrome.windows.create({ url: base + "/pip-src" });
+      const [t] = await chrome.tabs.query({ windowId: win.id });
+      await chrome.tabs.update(t.id, { pinned: true });
+      return win.id;
+    }, baseUrl);
+    await sleep(2500); // let the pin mirror across the normal windows
+
+    step("open a Document PiP window from a page (user gesture)");
+    const pinnedBefore = await swEval(async () => (await chrome.tabs.query({ pinned: true })).length);
+    const { page } = await openPage("/pip-host");
+    await page.bringToFront();
+    await clickPage(page, "/pip-host");
+    const pip = await waitFor(
+      "pip window",
+      () =>
+        swEval(async () => {
+          const all = await chrome.windows.getAll({ populate: true });
+          const w = all.find((x) => x.alwaysOnTop);
+          return w ? { id: w.id, type: w.type, tabs: (w.tabs || []).length } : null;
+        }),
+      10_000,
+    );
+    assert(
+      await page.evaluate(() => !!window.__pipOpen),
+      `document PiP opened (${await page.evaluate(() => window.__pipError || "no error")})`,
+    );
+    // The platform fact this whole guard rests on, asserted rather than
+    // remembered: if a future Chrome starts calling it "popup", we find out here.
+    assert(pip.type === "normal", `PiP window still reports type normal (got ${pip.type})`);
+
+    step("no copies injected, and none leaked into the real window");
+    await sleep(5000); // stable-strip wait + any (wrong) fill would be done by now
+    const pipTabs = await swEval(
+      async (id) => (await chrome.tabs.query({ windowId: id })).length,
+      pip.id,
+    );
+    assert(pipTabs === 1, `PiP window keeps only its own tab (found ${pipTabs})`);
+    const pinnedAfter = await swEval(async () => (await chrome.tabs.query({ pinned: true })).length);
+    assert(
+      pinnedAfter === pinnedBefore,
+      `pinned set unchanged by the PiP window (${pinnedBefore} -> ${pinnedAfter})`,
+    );
+
+    step("cleanup");
+    await swEval((id) => chrome.windows.remove(id).catch(() => {}), pip.id);
+    await page.close().catch(() => {});
     await swEval((id) => chrome.windows.remove(id).catch(() => {}), normId);
     await sleep(700);
   });

@@ -7,7 +7,8 @@
     "test:multiply": "node repro-multiply.mjs",
     "test:canon": "node repro-canon.mjs",
     "test:resurrect": "node repro-restore-resurrect.mjs",
-    "test:crystallize": "node repro-crystallize.mjs"
+    "test:crystallize": "node repro-crystallize.mjs",
+    "test:pip": "node repro-pip-window.mjs"
   },
   "devDependencies": {
     "puppeteer": "^24.0.0"

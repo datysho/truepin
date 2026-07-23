@@ -331,9 +331,23 @@ async function nextGid() {
   return `g${groupSeq + 1}`;
 }
 
+// The one predicate for "this window has a tab strip the mirror may fill".
+// window.type is NOT enough: Chrome reports a Document Picture-in-Picture
+// window as type "normal" - in windows.onCreated and in windows.getAll alike
+// (verified on Chrome 148). Google Meet opens one automatically when the user
+// leaves the call tab while somebody presents, and a PiP window hosts no tab
+// strip at all: chrome.tabs.create() aimed at it silently drops the tab into
+// the user's REAL window, so filling it materialized a full duplicate pinned
+// set there (v3.15.6 report). alwaysOnTop is the discriminator - a browsing
+// window is never always-on-top (Chrome offers no way to make one), while PiP
+// and overlay surfaces are, by construction.
+function canHostPins(win) {
+  return !!win && win.type === "normal" && !win.incognito && !win.alwaysOnTop;
+}
+
 async function normalWindows() {
   const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
-  return windows.filter((w) => !w.incognito);
+  return windows.filter(canHostPins);
 }
 
 // Create a mirror copy of a group in a window; the pending record lets the
@@ -366,12 +380,28 @@ async function createCopy(mirror, gid, windowId, index) {
     `mirror-copy ${pathKey(group.url)}`,
     true,
   );
-  if (tab) {
-    group.members[windowId] = tab.id;
-  } else {
-    traceDiag(`createCopy skipped/failed win=${windowId} gid=${gid}`);
+  const dropPending = () => {
     mirror.pending = mirror.pending.filter((p) => !(p.windowId === windowId && p.gid === gid));
+  };
+  if (!tab) {
+    traceDiag(`createCopy skipped/failed win=${windowId} gid=${gid}`);
+    dropPending();
+    return;
   }
+  // A copy must LAND in the window it was created for. Chrome accepts a
+  // create aimed at a window that cannot host tabs and silently puts the tab
+  // somewhere else - a visible duplicate in a window that already holds its
+  // own copy, recorded under a window id where nothing of ours actually
+  // lives, so the live engine never sees it as a duplicate. Trusting an
+  // unverified create is exactly how the set forked during a Meet call. Undo
+  // it and tell the caller this window is no tab host.
+  if (tab.windowId !== undefined && tab.windowId !== windowId) {
+    traceDiag(`createCopy misplaced: asked win=${windowId}, landed win=${tab.windowId} - undone`);
+    dropPending();
+    await closeTabs([tab.id]);
+    return "misplaced";
+  }
+  group.members[windowId] = tab.id;
 }
 
 // A pinned tab appeared (user pin, mirror copy, restore, session restore):
@@ -532,8 +562,9 @@ async function syncWindowFill(windowId, settings) {
       const gid = mirror.order[i];
       if (isEphemeralUrl(mirror.groups[gid].url)) continue; // never fill these
       if (mirror.groups[gid].members[windowId] === undefined) {
-        await createCopy(mirror, gid, windowId, i);
+        const outcome = await createCopy(mirror, gid, windowId, i);
         changed = true;
+        if (outcome === "misplaced") break; // no tab strip here: stop filling it
       }
     }
     if (changed) await putMirror(mirror);
@@ -1566,7 +1597,7 @@ chrome.windows.onCreated.addListener((win) => {
   enqueue(async () => {
     const settings = await getSettings();
     if (!settings.mirrorPinned) return;
-    if (!win || win.type !== "normal" || win.incognito) return;
+    if (!canHostPins(win)) return;
     if (!(await waitForStableStrip(win.id))) return;
     await syncWindowFill(win.id, settings);
   }, "window-created");
@@ -1582,11 +1613,11 @@ function isSplitTab(tab) {
   return tab.splitViewId !== undefined && tab.splitViewId !== chrome.tabs.SPLIT_VIEW_ID_NONE;
 }
 
-// A popup / app / DevTools window is not "normal": the mirror never fills it,
-// and the locked-to-front feature leaves it alone for the same reason.
+// A popup / app / DevTools / picture-in-picture window is not a tab strip: the
+// mirror never fills it, and the locked-to-front feature leaves it alone for
+// the same reason. One predicate for both (canHostPins).
 async function isNormalWindow(windowId) {
-  const win = await quiet(chrome.windows.get, windowId);
-  return !!win && win.type === "normal" && !win.incognito;
+  return canHostPins(await quiet(chrome.windows.get, windowId));
 }
 
 // A locked tab the USER placed into a tab group keeps its page protection
